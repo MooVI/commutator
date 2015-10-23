@@ -1,10 +1,13 @@
-from sympy import symbols, I, pretty
+from sympy import symbols, I, pretty, sympify
+import sympy
 
 class Ncproduct:
     def __init__(self, scalar, product):
         self.scalar = scalar
         if isinstance(product, list):
             self.product = product
+        elif isinstance(product, str):
+            self.product = self.destringify(product)
         else:
             self.product = [product]
             
@@ -83,16 +86,16 @@ class Ncproduct:
         else:
             return 'a' + str((a+1)//2)
 
-def destringify(string):
-    result = []
-    for op in string.split(' '):
-        if op[0] == 'a':
-            result.append(int(op[1:])*2-1)
-        elif op[0] == 'b':
-            result.append(int(op[1:])*2)
-        else:
-            print('Unknown operator ' + op)
-    return result
+    def destringify(self, string):
+        result = []
+        for op in string.split(' '):
+            if op[0] == 'a':
+                result.append(int(op[1:])*2-1)
+            elif op[0] == 'b':
+                result.append(int(op[1:])*2)
+            else:
+                print('Unknown operator ' + op)
+        return result
 
 def postmultiply(group,a):
      return [b*a for b in group]
@@ -152,6 +155,7 @@ def simplify_group(group):
         D[tuple(ncprod.product)].append(i)
     return [Ncproduct(sum([group[i].scalar for i in D[key]]), list(key)) for key in D]
 
+
 def calculate_commutator(group_a,group_b):
     if not isinstance(group_a, list):
         group_a = [group_a]
@@ -165,15 +169,51 @@ def calculate_commutator(group_a,group_b):
     group = simplify_group(group)
     remove_zeros(group)
     return group
-        
-def print_group(group):
+
+
+def find_order(expr,orders):
+    """Where order is power of small quantity, and orders a dict of
+    symbols with their order."""
+    expr = sympify(expr)
+    order = float("inf")
+    if expr.func == sympy.Add:
+        for arg in expr.args:
+            torder = find_order(arg, orders)
+            if torder < order:
+                order = torder
+    elif expr.func == sympy.Mul:
+        order = sum([find_order(arg, orders) for arg in expr.args])
+    elif expr.func == sympy.Pow:
+        order = find_order(expr.args[0], orders)*expr.args[1]
+    elif expr.func == sympy.Symbol:
+        order = orders.get(expr,0)
+    else:
+        order = 0
+    return order
+
+def order_group(group, orders):
+    return sorted(group, key = lambda a: find_order(a.scalar,orders))
+
+def print_group(group, breaks = True):
+    if not hasattr(print_group, 'orders'):
+        print_group.orders = {}
     if isinstance(group, list):
-        print(' + '.join(str(a) for a in group).replace('+ -', '\u2212 '))
+        if len(group) > 1:
+            group = order_group(group, print_group.orders)
+            if breaks:
+                print('{'+ ('+'+'\n+'.join(str(a) for a in group)).replace('+-', '\u2212')+'}')
+            if not breaks:
+                print(' + '.join(str(a) for a in group).replace('+ -', '\u2212'))
+        else:
+            print(group[0])
     else:
         print(group)
 
+        
 V,J,f = symbols('V J f')
 L = 20
+orders = {V:1,f:1,J:-1}
+print_group.orders = orders
 fpart = [Ncproduct(I*f, [2*j+1,2*j+2]) for j in range(L)]
 Vpart = [Ncproduct(V, [2*j+1,2*j+2,2*j+3,2*j+4]) for j in range(L-2)]
 small = fpart+Vpart
