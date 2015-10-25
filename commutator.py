@@ -1,4 +1,5 @@
-from sympy import symbols, I, pretty, sympify
+from sympy import symbols, I, pretty, sympify, Matrix
+from collections import OrderedDict
 import sympy
 
 class Ncproduct:
@@ -88,6 +89,7 @@ class Ncproduct:
 
     def destringify(self, string):
         result = []
+        string = string.replace('\u22c5', ' ')
         for op in string.split(' '):
             if op[0] == 'a':
                 result.append(int(op[1:])*2-1)
@@ -148,13 +150,24 @@ def set_squares_to_identity(ncprod):
         else:
             i+=1
 
-def simplify_group(group):
+def collect_terms(group):
     from collections import defaultdict
     D = defaultdict(list)
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].append(i)
     return [Ncproduct(sum([group[i].scalar for i in D[key]]), list(key)) for key in D]
 
+def simplify_group(group):
+    remove_zeros(group)
+    for ncprod in group:
+        sort_anticommuting_product(ncprod)
+        set_squares_to_identity(ncprod)
+    group = collect_terms(group)
+    remove_zeros(group)
+    return group
+
+def multiply_groups(group_a, group_b):
+    return simplify_group([a*b for a in group_a for b in group_b])
 
 def calculate_commutator(group_a,group_b):
     if not isinstance(group_a, list):
@@ -162,14 +175,7 @@ def calculate_commutator(group_a,group_b):
     if not isinstance(group_b, list):
         group_b = [group_b]
     group = commute_group(group_a, group_b)
-    remove_zeros(group)
-    for ncprod in group:
-        sort_anticommuting_product(ncprod)
-        set_squares_to_identity(ncprod)
-    group = simplify_group(group)
-    remove_zeros(group)
-    return group
-
+    return simplify_group(group)
 
 def find_order(expr,orders):
     """Where order is power of small quantity, and orders a dict of
@@ -209,13 +215,66 @@ def print_group(group, breaks = True):
     else:
         print(group)
 
+def fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart):
+    row_to_fill = matrixrows[subspace[tuple(to_cancel.product)]]
+    if not row_to_fill:
+        #pdb.set_trace()
+        comm = calculate_commutator(Jpart, Ncproduct(1,to_cancel.product))
+        row_to_fill[:] = [0]*len(subspace)
+        for ncprod in comm:
+           try:
+                ind = subspace[tuple(ncprod.product)]
+           except KeyError:
+                ind = len(subspace)
+                subspace[tuple(ncprod.product)] = ind
+                for row in matrixrows:
+                    if row:
+                        row.append(0)
+                matrixrows.append([])
+                fill_subspace_rows(ncprod, matrixrows, subspace, Jpart)
+           row_to_fill[ind] = ncprod.scalar
+                
+def find_subspace(to_cancel, Jpart):
+    subspace = OrderedDict()
+    matrixrows = []
+    for ncprod in to_cancel:
+        if not tuple(ncprod.product) in subspace:
+            subspace[tuple(ncprod.product)] = len(subspace)
+            for row in matrixrows:
+                if row:
+                    row.append(0)
+            matrixrows.append([]) 
+            fill_subspace_rows(ncprod, matrixrows, subspace, Jpart)
+    return subspace, matrixrows
+
+def build_vector_to_cancel(to_cancel, subspace):
+    cvector = [0]*len(subspace)
+    for ncprod in to_cancel:
+        cvector[subspace[tuple(ncprod.product)]] = ncprod.scalar
+    return cvector
+
+def solve_for_commuting_term(cvector, lower_order_op, order, matrixrows, subspace):
+    matrix = Matrix(matrixrows)
+    augmatrix = matrix.col_insert(len(subspace), Matrix(cvector))
+    if matrix.rank() <= augmatrix.rank():
+        if matrix.rank() == len(subspace):
+            solvector = matrix.LUsolve(Matrix(cvector))
+        else:
+            print('Arbitrary values. Not yet implemented.')
+            rref = augmatrix.rref()
+            for i, row in enumerate(rref):
+                if all(a==0 for a in row):
+                    rref.row_del(i)
+            
+            return None
+    else:
+        print('Matrix not invertible. Something has gone wrong.')
+        return None
+    
+    return simplify_group([Ncproduct(solvector[i], list(key)) for i,key in enumerate(subspace)])
         
-V,J,f = symbols('V J f')
-L = 20
-orders = {V:1,f:1,J:-1}
-print_group.orders = orders
-fpart = [Ncproduct(I*f, [2*j+1,2*j+2]) for j in range(L)]
-Vpart = [Ncproduct(V, [2*j+1,2*j+2,2*j+3,2*j+4]) for j in range(L-2)]
-small = fpart+Vpart
-Jpart = [Ncproduct(I*J, [2*j+2,2*j+3]) for j in range(L-1)]
-H = fpart + Vpart +Jpart
+def print_subspace(subspace):
+    for key in subspace:
+        print(' '.join([Ncproduct.stringify(Ncproduct,a) for a in key]))
+    
+    
