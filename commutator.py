@@ -155,7 +155,7 @@ def collect_terms(group):
     D = defaultdict(list)
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].append(i)
-    return [Ncproduct(sum([group[i].scalar for i in D[key]]), list(key)) for key in D]
+    return [Ncproduct(sympy.expand(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
 
 def simplify_group(group):
     remove_zeros(group)
@@ -253,24 +253,71 @@ def build_vector_to_cancel(to_cancel, subspace):
         cvector[subspace[tuple(ncprod.product)]] = ncprod.scalar
     return cvector
 
-def solve_for_commuting_term(cvector, lower_order_op, order, matrixrows, subspace):
+
+
+def _normalise_fill_coeff(product, rows, cvector, coeffs):
+    if product.func != sympy.Mul:
+        raise ValueError
+    for i,coeff in enumerate(coeffs):
+        if coeff in product.args:
+            product = sympy.Mul(*[prod for prod in product.args if prod is not coeff])
+            rows[-1][i] = product
+            break
+    else:
+        cvector[-1] = -product
+
+def normalise(psi_total, order, orders, coeffs, cvector):
+    norm = multiply_groups(psi_total, psi_total)
+    to_zero = [ncprod.scalar for ncprod in norm if (find_order(ncprod.scalar, orders) <= order
+                                                    and ncprod.product)]
+    rows = []
+    for term in to_zero:
+        rows.append([0]*len(coeffs))
+        cvector.append(0)
+        if term.func == sympy.Add:
+            for arg in term.args:
+                if find_order(arg, orders) <= order:
+                    _normalise_fill_coeff(arg, rows, cvector, coeffs)
+        else:
+            _normalise_fill_coeff(term, rows, cvector, coeffs)
+    return rows
+            
+            
+def solve_for_commuting_term(cvector, psi_lower, order, orders, matrixrows, subspace):
     matrix = Matrix(matrixrows)
     augmatrix = matrix.col_insert(len(subspace), Matrix(cvector))
     if matrix.rank() <= augmatrix.rank():
         if matrix.rank() == len(subspace):
             solvector = matrix.LUsolve(Matrix(cvector))
         else:
-            print('Arbitrary values. Not yet implemented.')
-            rref = augmatrix.rref()
-            for i, row in enumerate(rref):
-                if all(a==0 for a in row):
-                    rref.row_del(i)
-            
-            return None
+            rref = augmatrix.rref(simplify=True)
+            iter = 0
+            while iter < len(rref[0][:,0]):
+                if all(a==0 for a in rref[0][iter,0:-1]):
+                    rref[0].row_del(iter)
+                else:
+                    iter+=1
+            cvector = [n for sn in rref[0][:,-1].tolist() for n in sn] #flatten list
+            a = sympy.numbered_symbols('b')
+            b = [next(a) for i in range(len(subspace))]
+            psi_order = [Ncproduct(b[subspace[key]], list(key))for i,key in enumerate(subspace)]
+            psi_total = psi_lower + psi_order
+            new_orders = orders.copy()
+            new_orders.update(dict(zip(b, [order]*len(b))))
+            rows = normalise(psi_total, order, new_orders, b, cvector)
+            matrix = Matrix([row for row
+                             in [rref[0][i,0:-1] for i in range(len(rref[0][:,0]))]]
+                             +rows)
+            augmatrix = matrix.col_insert(len(matrix[0,:]), Matrix(cvector))
+            solutions = sympy.solve_linear_system(augmatrix,*b)
+            if not solutions:
+                print('Failed. Inconsistency.')
+                print(augmatrix)
+                return None
+            solvector = [solutions[b[i]] for i in range(len(b))]
     else:
         print('Matrix not invertible. Something has gone wrong.')
         return None
-    
     return simplify_group([Ncproduct(solvector[i], list(key)) for i,key in enumerate(subspace)])
         
 def print_subspace(subspace):
