@@ -1,4 +1,5 @@
 from sympy import symbols, I, pretty, sympify, Matrix
+#from sympy.solvers.solveset import linsolve
 from collections import OrderedDict
 import sympy
 
@@ -87,6 +88,12 @@ class Ncproduct:
         else:
             return 'a' + str((a+1)//2)
 
+    def _texify_stringify(self, a):
+        if a % 2 == 0:
+            return 'b_' + str(a//2)
+        else:
+            return 'a_' + str((a+1)//2)
+
     def destringify(self, string):
         result = []
         string = string.replace('\u22c5', ' ')
@@ -98,6 +105,13 @@ class Ncproduct:
             else:
                 print('Unknown operator ' + op)
         return result
+
+    def texify(self):
+        tex = sympy.latex(self.scalar)
+        if (self.scalar.func ==sympy.Add):
+            tex = '\\left (' + tex + '\\right )'
+        return ' '.join([tex]
+                       +[self._texify_stringify(a) for a in self.product])
 
 def postmultiply(group,a):
      return [b*a for b in group]
@@ -114,7 +128,7 @@ def commute(a,b):
         return [0*a*b]
     else:
         return [2*a*b]
-        
+    
 def commute_group(group_a, group_b):
     result = []
     for a in group_a:
@@ -214,6 +228,19 @@ def print_group(group, breaks = True):
             print(group[0])
     else:
         print(group)
+
+def texify_group(group):
+    """Uses same orders as print_group"""
+    if not hasattr(print_group, 'orders'):
+        print_group.orders = {}
+    if isinstance(group, list):
+        if len(group) > 1:
+            group = order_group(group, print_group.orders)
+            print(' + '.join(a.texify() for a in group).replace('+ -', '-'))
+        else:
+            print(group[0].texify())
+    else:
+        print(group.texify())
 
 def fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart):
     row_to_fill = matrixrows[subspace[tuple(to_cancel.product)]]
