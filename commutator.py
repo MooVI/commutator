@@ -348,9 +348,8 @@ def solve_for_commuting_term(cvector, psi_lower, order, orders, matrixrows, subs
 
         
 def print_subspace(subspace):
-    for key in subspace:
-        print(' '.join([Ncproduct.stringify(Ncproduct,a) for a in key]))
-
+    for key, item in subspace.items():
+        print(str(item)+ ': ' + ' '.join([Ncproduct.stringify(Ncproduct,a) for a in key]))
         
 def sparse_fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart, ind_col):
         #pdb.set_trace()
@@ -430,16 +429,19 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector):
     sspacedict = dict(zip(sub_sub_space, range(len(sub_sub_space))))
     length = len(sub_sub_space)
     augmatrixrows = []
+    rownumstore = [] #for debugging
     for rownum, row in matrixrows.items():
         if row and row[0][0] in sub_sub_space:
             augmatrixrows.append(length*[0]+[cvector[rownum]])
+            rownumstore.append(rownum)
             for el in row:
                 augmatrixrows[-1][sspacedict[el[0]]] = el[1]
     fvars = [coeffs[ind] for ind in sub_sub_space]
     sols = linsolve(Matrix(augmatrixrows),fvars)
     if not sols:
-        print(augmatrixrows)
+        print(repr(Matrix(augmatrixrows)))
         print(fvars)
+        print(rownum)
         raise ValueError("Failure. No solutions.")
     return dict(zip(fvars, list(sols)[0]))
     
