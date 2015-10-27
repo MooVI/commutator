@@ -1,5 +1,5 @@
 from sympy import symbols, I, pretty, sympify, Matrix
-#from sympy.solvers.solveset import linsolve
+from sympy.solvers.solveset import linsolve
 from collections import OrderedDict
 import sympy
 
@@ -193,7 +193,8 @@ def calculate_commutator(group_a,group_b):
 
 def find_order(expr,orders):
     """Where order is power of small quantity, and orders a dict of
-    symbols with their order."""
+    symbols with their order.
+    """
     expr = sympify(expr)
     order = float("inf")
     if expr.func == sympy.Add:
@@ -280,8 +281,6 @@ def build_vector_to_cancel(to_cancel, subspace):
         cvector[subspace[tuple(ncprod.product)]] = ncprod.scalar
     return cvector
 
-
-
 def _normalise_fill_coeff(product, rows, cvector, coeffs):
     if product.func != sympy.Mul:
         raise ValueError
@@ -346,9 +345,116 @@ def solve_for_commuting_term(cvector, psi_lower, order, orders, matrixrows, subs
         print('Matrix not invertible. Something has gone wrong.')
         return None
     return simplify_group([Ncproduct(solvector[i], list(key)) for i,key in enumerate(subspace)])
+
         
 def print_subspace(subspace):
     for key in subspace:
         print(' '.join([Ncproduct.stringify(Ncproduct,a) for a in key]))
+
+        
+def sparse_fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart, ind_col):
+        #pdb.set_trace()
+        comm = calculate_commutator(Jpart, Ncproduct(1,to_cancel.product))
+        for ncprod in comm:
+           try:
+                ind_row = subspace[tuple(ncprod.product)]
+           except KeyError:
+                ind_row = len(subspace)
+                subspace[tuple(ncprod.product)] = ind_row
+                matrixrows[ind_row] = []
+                sparse_fill_subspace_rows(ncprod, matrixrows, subspace, Jpart, ind_row)
+           matrixrows[ind_row].append((ind_col, ncprod.scalar))
+                
+def sparse_find_subspace(to_cancel, Jpart):
+    subspace = OrderedDict()
+    matrixrows = {}
+    for ncprod in to_cancel:
+        if not tuple(ncprod.product) in subspace:
+            ind = len(subspace)
+            subspace[tuple(ncprod.product)] = ind
+            matrixrows[ind] = []
+            sparse_fill_subspace_rows(ncprod, matrixrows, subspace, Jpart, ind)
+    return subspace, matrixrows
+
+def _sparse_normalise_fill_coeff(product, matrixrows, cvector, coeffs, ind_row):
+    if product.func != sympy.Mul:
+        raise ValueError
+    for ind_col,coeff in enumerate(coeffs):
+        if coeff in product.args:
+            product = sympy.Mul(*[prod for prod in product.args if prod is not coeff])
+            matrixrows[ind_row].append((ind_col, product))
+            break
+    else:
+        cvector[-1] = product
+
+def sparse_normalise(psi_total, order, orders, coeffs, cvector, matrixrows):
+    norm = multiply_groups(psi_total, psi_total)
+    to_zero = [ncprod.scalar for ncprod in norm if (find_order(ncprod.scalar, orders) <= order
+                                                    and ncprod.product)]
+    ind = len(coeffs)
+    for term in to_zero:
+        matrixrows[ind] = []
+        cvector.append(0)
+        if term.func == sympy.Add:
+            for arg in term.args:
+                if find_order(arg, orders) <= order:
+                    _sparse_normalise_fill_coeff(arg, matrixrows, cvector, coeffs, ind)
+        else:
+            _sparse_normalise_fill_coeff(term, matrixrows, cvector, coeffs, ind)
+        ind += 1
+
+def merge(lsts):
+    """From stackoverflow: http://stackoverflow.com/questions/9110837/"""
+    sets = [set(lst) for lst in lsts if lst]
+    merged = 1
+    while merged:
+        merged = 0
+        results = []
+        while sets:
+            common, rest = sets[0], sets[1:]
+            sets = []
+            for x in rest:
+                if x.isdisjoint(common):
+                    sets.append(x)
+                else:
+                    merged = 1
+                    common |= x
+            results.append(common)
+        sets = results
+    return sets
+
+def find_sub_subspaces(matrixrows):
+    return [list(space) for space in merge([[el[0] for el in row] for rownum, row in matrixrows.items()])]
+
+def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector):
+    sspacedict = dict(zip(sub_sub_space, range(len(sub_sub_space))))
+    length = len(sub_sub_space)
+    augmatrixrows = []
+    for rownum, row in matrixrows.items():
+        if row and row[0][0] in sub_sub_space:
+            augmatrixrows.append(length*[0]+[cvector[rownum]])
+            for el in row:
+                augmatrixrows[-1][sspacedict[el[0]]] = el[1]
+    fvars = [coeffs[ind] for ind in sub_sub_space]
+    sols = linsolve(Matrix(augmatrixrows),fvars)
+    if not sols:
+        print(augmatrixrows)
+        print(fvars)
+        raise ValueError("Failure. No solutions.")
+    return dict(zip(fvars, list(sols)[0]))
     
-    
+                    
+def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders, matrixrows, subspace):
+    fvar_gen = sympy.numbered_symbols('fvar')
+    fvars = [next(fvar_gen) for i in range(len(subspace))]
+    psi_order = [Ncproduct(fvars[subspace[key]], list(key))for i,key in enumerate(subspace)]
+    psi_total = psi_lower + psi_order
+    new_orders = orders.copy()
+    new_orders.update(dict(zip(fvars, [order]*len(fvars))))
+    sparse_normalise(psi_total, order, new_orders, fvars, cvector, matrixrows)
+    sub_sub_spaces = find_sub_subspaces(matrixrows)
+    solutions = {}
+    for ss_space in sub_sub_spaces:
+        solutions.update(solve_for_sub_subspace(matrixrows, ss_space, fvars, cvector))
+    solvector = [solutions[fvars[i]] for i in range(len(fvars))]
+    return simplify_group([Ncproduct(-solvector[i], list(key)) for i,key in enumerate(subspace)])
