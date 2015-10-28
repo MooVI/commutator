@@ -108,7 +108,7 @@ class Ncproduct:
 
     def texify(self):
         tex = sympy.latex(self.scalar)
-        if (self.scalar.func ==sympy.Add):
+        if (sympify(self.scalar).func ==sympy.Add):
             tex = '\\left (' + tex + '\\right )'
         return ' '.join([tex]
                        +[self._texify_stringify(a) for a in self.product])
@@ -169,7 +169,7 @@ def collect_terms(group):
     D = defaultdict(list)
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].append(i)
-    return [Ncproduct(sympy.expand(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
+    return [Ncproduct(sympy.simplify(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
 
 def simplify_group(group):
     remove_zeros(group)
@@ -237,11 +237,11 @@ def texify_group(group):
     if isinstance(group, list):
         if len(group) > 1:
             group = order_group(group, print_group.orders)
-            print(' + '.join(a.texify() for a in group).replace('+ -', '-'))
+            return('$$'+' + '.join(a.texify() for a in group).replace('+ -', '-')+'$$')
         else:
-            print(group[0].texify())
+            return('$$'+group[0].texify()+'$$')
     else:
-        print(group.texify())
+        return('$$'+group.texify()+'$$')
 
 def fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart):
     row_to_fill = matrixrows[subspace[tuple(to_cancel.product)]]
@@ -437,13 +437,13 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector):
             for el in row:
                 augmatrixrows[-1][sspacedict[el[0]]] = el[1]
     fvars = [coeffs[ind] for ind in sub_sub_space]
-    sols = linsolve(Matrix(augmatrixrows),fvars)
+    sols = sympy.solve_linear_system(Matrix(augmatrixrows),*fvars)
     if not sols:
         print(repr(Matrix(augmatrixrows)))
         print(fvars)
-        print(rownum)
+        print(rownumstore)
         raise ValueError("Failure. No solutions.")
-    return dict(zip(fvars, list(sols)[0]))
+    return sols
     
                     
 def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders, matrixrows, subspace):
