@@ -1,5 +1,6 @@
 from sympy import symbols, I, pretty, sympify, Matrix
 from sympy.solvers.solveset import linsolve, linear_eq_to_matrix
+import ipdb
 from collections import OrderedDict
 import sympy
 
@@ -169,7 +170,14 @@ def collect_terms(group):
     D = defaultdict(list)
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].append(i)
-    return [Ncproduct(sympy.ratsimp(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
+    return [Ncproduct(sympy.expand(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
+
+def full_collect_terms(group):
+    from collections import defaultdict
+    D = defaultdict(list)
+    for i,ncprod in enumerate(group):
+        D[tuple(ncprod.product)].append(i)
+    return [Ncproduct(sympy.simplify(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
 
 def simplify_group(group):
     remove_zeros(group)
@@ -177,6 +185,15 @@ def simplify_group(group):
         sort_anticommuting_product(ncprod)
         set_squares_to_identity(ncprod)
     group = collect_terms(group)
+    remove_zeros(group)
+    return group
+
+def full_simplify_group(group):
+    remove_zeros(group)
+    for ncprod in group:
+        sort_anticommuting_product(ncprod)
+        set_squares_to_identity(ncprod)
+    group = full_collect_terms(group)
     remove_zeros(group)
     return group
 
@@ -243,6 +260,11 @@ def texify_group(group):
     else:
         return('$$'+group.texify()+'$$')
 
+def substitute_group(group, subs_rules):
+    temp = [Ncproduct(sympify(ncprod.scalar).subs((var, rule) for var, rule in subs_rules.items()),
+		     ncprod.product) for ncprod in group]
+    return full_simplify_group(temp)
+
 def fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart):
     row_to_fill = matrixrows[subspace[tuple(to_cancel.product)]]
     if not row_to_fill:
@@ -281,70 +303,7 @@ def build_vector_to_cancel(to_cancel, subspace):
         cvector[subspace[tuple(ncprod.product)]] = ncprod.scalar
     return cvector
 
-def _normalise_fill_coeff(product, rows, cvector, coeffs):
-    if product.func != sympy.Mul:
-        raise ValueError
-    for i,coeff in enumerate(coeffs):
-        if coeff in product.args:
-            product = sympy.Mul(*[prod for prod in product.args if prod is not coeff])
-            rows[-1][i] = product
-            break
-    else:
-        cvector[-1] = -product
 
-def normalise(psi_total, order, orders, coeffs, cvector):
-    norm = multiply_groups(psi_total, psi_total)
-    to_zero = [ncprod.scalar for ncprod in norm if (find_order(ncprod.scalar, orders) <= order
-                                                    and ncprod.product)]
-    rows = []
-    for term in to_zero:
-        rows.append([0]*len(coeffs))
-        cvector.append(0)
-        if term.func == sympy.Add:
-            for arg in term.args:
-                if find_order(arg, orders) <= order:
-                    _normalise_fill_coeff(arg, rows, cvector, coeffs)
-        else:
-            _normalise_fill_coeff(term, rows, cvector, coeffs)
-    return rows
-            
-            
-def solve_for_commuting_term(cvector, psi_lower, order, orders, matrixrows, subspace):
-    matrix = Matrix(matrixrows)
-    augmatrix = matrix.col_insert(len(subspace), Matrix(cvector))
-    if matrix.rank() <= augmatrix.rank():
-        if matrix.rank() == len(subspace):
-            solvector = matrix.LUsolve(Matrix(cvector))
-        else:
-            rref = augmatrix.rref(simplify=True)
-            iter = 0
-            while iter < len(rref[0][:,0]):
-                if all(a==0 for a in rref[0][iter,0:-1]):
-                    rref[0].row_del(iter)
-                else:
-                    iter+=1
-            cvector = [n for sn in rref[0][:,-1].tolist() for n in sn] #flatten list
-            a = sympy.numbered_symbols('b')
-            b = [next(a) for i in range(len(subspace))]
-            psi_order = [Ncproduct(b[subspace[key]], list(key))for i,key in enumerate(subspace)]
-            psi_total = psi_lower + psi_order
-            new_orders = orders.copy()
-            new_orders.update(dict(zip(b, [order]*len(b))))
-            rows = normalise(psi_total, order, new_orders, b, cvector)
-            matrix = Matrix([row for row
-                             in [rref[0][i,0:-1] for i in range(len(rref[0][:,0]))]]
-                             +rows)
-            augmatrix = matrix.col_insert(len(matrix[0,:]), Matrix(cvector))
-            solutions = sympy.solve_linear_system(augmatrix,*b)
-            if not solutions:
-                print('Failed. Inconsistency.')
-                print(augmatrix)
-                return None
-            solvector = [solutions[b[i]] for i in range(len(b))]
-    else:
-        print('Matrix not invertible. Something has gone wrong.')
-        return None
-    return simplify_group([Ncproduct(solvector[i], list(key)) for i,key in enumerate(subspace)])
 
         
 def print_subspace(subspace):
@@ -416,7 +375,7 @@ def merge(lsts):
 def find_sub_subspaces(matrixrows):
     return [list(space) for space in merge([[el[0] for el in row] for rownum, row in matrixrows.items()])]
 
-def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector):
+def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector, iofvars, subs_rules):
     sspacedict = dict(zip(sub_sub_space, range(len(sub_sub_space))))
     length = len(sub_sub_space)
     augmatrixrows = []
@@ -428,18 +387,43 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector):
             for el in row:
                 augmatrixrows[-1][sspacedict[el[0]]] = el[1]
     fvars = [coeffs[ind] for ind in sub_sub_space]
-    sols = sympy.solve_linear_system(Matrix(augmatrixrows),*fvars)
+    augmatrix = Matrix(augmatrixrows)
+    oldfvars = []
+    if iofvars:
+        #ipdb.set_trace()
+        atoms = augmatrix.atoms(sympy.Symbol)
+        for iofvar in subs_rules:
+            if iofvar in atoms:
+                augmatrix = augmatrix.subs(iofvar,subs_rules[iofvar])
+        atoms = augmatrix.atoms(sympy.Symbol)
+        for iofvar in iofvars:
+            if iofvar not in subs_rules and iofvar in atoms:
+                fvars.append(iofvar)
+                oldfvars.append(iofvar)
+                augmatrix = augmatrix.col_insert(-1, sympy.zeros(augmatrix.rows,1))
+                for row_ind in range(len(augmatrix[:,0])):
+                    coeff_val = -sympify(augmatrix[row_ind,-1]).coeff(iofvar)
+                    augmatrix[row_ind,-2] = coeff_val
+                    augmatrix[row_ind,-1] += coeff_val*iofvar
+    sols = sympy.solve_linear_system(augmatrix,*fvars)
     if not sols:
-        print(repr(Matrix(augmatrixrows)))
+        print(repr(augmatrix))
         print(fvars)
         print(rownumstore)
+        print(iofvars)
+        print(subs_rules)
         raise ValueError("Failure. No solutions.")
+    for oldfvar in oldfvars:
+        if oldfvar in sols:
+            subs_rules.update({var: rule.subs(oldfvar, sols[oldfvar])
+                          for var, rule in subs_rules.items()})
+            subs_rules[oldfvar] = sols[oldfvar]
     return sols
     
                     
 def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
                                     matrixrows, subspace, norm = True,
-                                    fvarname = 'A'):
+                                    fvarname = 'A', iofvars = None, subs_rules = None):
     fvar_gen = sympy.numbered_symbols('fvar')
     fvars = [next(fvar_gen) for i in range(len(subspace))]
     psi_order = [Ncproduct(fvars[subspace[key]], list(key))
@@ -452,23 +436,38 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
     sub_sub_spaces = find_sub_subspaces(matrixrows)
     print(sub_sub_spaces)
     solutions = {}
+    if subs_rules is None:
+        subs_rules = {}
     for ss_space in sub_sub_spaces:
-        solutions.update(solve_for_sub_subspace(matrixrows, ss_space, fvars, cvector))
+        solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
+                                                fvars, cvector, iofvars,
+                                                subs_rules))
     solvector = []
     newfvars = []
     oldfvars  = []
-    freevars_gen = sympy.numbered_symbols('fvarname')
+    freevars_gen = sympy.numbered_symbols(fvarname)
     for fvar in fvars:
         try:
-            solvector.append([solutions[fvar]])
+            solvector.append(solutions[fvar])
         except KeyError:
-            newvar = next(freevars_gen)
-            solvector.append(newvar)
-            newfvars.append(newvar)
+            newfvar = next(freevars_gen)
+            solvector.append(newfvar)
+            newfvars.append(newfvar)
             oldfvars.append(fvar)
     if newfvars:
-        rules = [zip(oldfvars, newfvars)]
+        rules = [sub for sub in zip(oldfvars, newfvars)]
         solvector = [sol.subs(rules) for sol in solvector]
-    return simplify_group([Ncproduct(-solvector[i], list(key))
+        if iofvars is not None:
+            iofvars[:] = newfvars
+    if not subs_rules:
+        return simplify_group([Ncproduct(-solvector[i], list(key))
+                           for i,key in enumerate(subspace)])
+    else:
+        return simplify_group([Ncproduct(-solvector[i].subs(
+            [(var, rule) for var, rule in subs_rules.items()]), list(key))
                            for i,key in enumerate(subspace)])
 
+
+def check_normalisable(psi, fvars, order, orders):
+    pass
+    
