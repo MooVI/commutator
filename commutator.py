@@ -1,5 +1,5 @@
 from sympy import symbols, I, pretty, sympify, Matrix
-from sympy.solvers.solveset import linsolve, linear_eq_to_matrix
+#from sympy.solvers.solveset import linsolve, linear_eq_to_matrix
 import ipdb
 from collections import OrderedDict
 import sympy
@@ -432,7 +432,7 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
                                     fvarname = 'A', iofvars = None, subs_rules = None):
     fvar_gen = sympy.numbered_symbols('fvar')
     fvars = [next(fvar_gen) for i in range(len(subspace))]
-    psi_order = [Ncproduct(fvars[subspace[key]], list(key))
+    psi_order = [Ncproduct(-fvars[subspace[key]], list(key))
                  for i,key in enumerate(subspace)]
     if norm:
         psi_total = psi_lower + psi_order
@@ -444,10 +444,12 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
     solutions = {}
     if subs_rules is None:
         subs_rules = {}
-    for ss_space in sub_sub_spaces:
+    length_ss = len(sub_sub_spaces)
+    for i, ss_space in enumerate(sub_sub_spaces):
         solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
                                                 fvars, cvector, iofvars,
                                                 subs_rules))
+        print(str(i)+'/'+str(length_ss), end = '\r')
     solvector = []
     newfvars = []
     oldfvars  = []
