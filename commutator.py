@@ -229,6 +229,14 @@ def find_order(expr,orders):
         order = 0
     return order
 
+def neglect_to_order(expr, order, orders):
+    expr = sympy.expand(expr)
+    if find_order(expr, orders) > order:
+        return 0
+    if expr.func == sympy.Add:
+        expr = sympy.Add(*[neglect_to_order(term, order, orders) for term in expr.args])
+    return expr
+            
 def order_group(group, orders):
     return sorted(group, key = lambda a: find_order(a.scalar,orders))
 
@@ -304,7 +312,6 @@ def build_vector_to_cancel(to_cancel, subspace):
     return cvector
 
 
-
         
 def print_subspace(subspace):
     for key, item in subspace.items():
@@ -334,11 +341,11 @@ def sparse_find_subspace(to_cancel, Jpart):
             sparse_fill_subspace_rows(ncprod, matrixrows, subspace, Jpart, ind)
     return subspace, matrixrows
 
-def sparse_normalise(psi_total, order, orders, coeffs, cvector, matrixrows):
+def sparse_normalise(psi_total, order, orders, coeffs, cvector, matrixrows, start_ind = 0):
     norm = multiply_groups(psi_total, psi_total)
     to_zero = [ncprod.scalar for ncprod in norm if (find_order(ncprod.scalar, orders) <= order
                                                     and ncprod.product)]
-    ind = len(coeffs)
+    ind = start_ind
     for term in to_zero:
         matrixrows[ind] = []
         row = matrixrows[ind]
@@ -347,9 +354,8 @@ def sparse_normalise(psi_total, order, orders, coeffs, cvector, matrixrows):
             if product != 0 and find_order(product, orders) == 0:
                 row.append((ind_col, product))
         const_term = sympy.expand(term).as_coeff_add(*coeffs)[0]
-        if find_order(const_term, orders) > order:
-            const_term = 0
-        cvector.append(const_term)
+        const_term = neglect_to_order(const_term, order, orders)
+        cvector.append(-const_term)
         ind+=1
 
 def merge(lsts):
@@ -375,7 +381,7 @@ def merge(lsts):
 def find_sub_subspaces(matrixrows):
     return [list(space) for space in merge([[el[0] for el in row] for rownum, row in matrixrows.items()])]
 
-def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector, iofvars, subs_rules):
+def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector, iofvars, subs_rules, debug = False):
     sspacedict = dict(zip(sub_sub_space, range(len(sub_sub_space))))
     length = len(sub_sub_space)
     augmatrixrows = []
@@ -432,7 +438,7 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
         psi_total = psi_lower + psi_order
         new_orders = orders.copy()
         new_orders.update(dict(zip(fvars, [order]*len(fvars))))
-        sparse_normalise(psi_total, order, new_orders, fvars, cvector, matrixrows)
+        sparse_normalise(psi_total, order, new_orders, fvars, cvector, matrixrows, start_ind = len(fvars))
     sub_sub_spaces = find_sub_subspaces(matrixrows)
     print(sub_sub_spaces)
     solutions = {}
@@ -469,5 +475,13 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
 
 
 def check_normalisable(psi, fvars, order, orders):
-    pass
-    
+    matrixrows = {}
+    cvector = []
+    solutions = {}
+    sparse_normalise(psi, order, orders, fvars, cvector, matrixrows)
+    sub_sub_spaces = find_sub_subspaces(matrixrows)
+    for ss_space in sub_sub_spaces:
+        solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
+                                                fvars, cvector, None,
+                                                None))
+    return solutions
