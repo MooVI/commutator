@@ -1,5 +1,5 @@
 from sympy import symbols, I, pretty, sympify, Matrix
-#from sympy.solvers.solveset import linsolve, linear_eq_to_matrix
+from sympy.solvers.solveset import linsolve, linear_eq_to_matrix
 import ipdb
 from collections import OrderedDict
 import sympy
@@ -347,13 +347,14 @@ def sparse_normalise(psi_total, order, orders, coeffs, cvector, matrixrows, star
                                                     and ncprod.product)]
     ind = start_ind
     for term in to_zero:
+        term = sympy.expand(term)
         matrixrows[ind] = []
         row = matrixrows[ind]
         for ind_col, coeff in enumerate(coeffs):
-            product = term.coeff(coeff)
-            if product != 0 and find_order(product, orders) == 0:
+            product = neglect_to_order(term.coeff(coeff), 0, orders)
+            if product != 0:
                 row.append((ind_col, product))
-        const_term = sympy.expand(term).as_coeff_add(*coeffs)[0]
+        const_term = term.as_coeff_add(*coeffs)[0]
         const_term = neglect_to_order(const_term, order, orders)
         cvector.append(-const_term)
         ind+=1
@@ -380,6 +381,15 @@ def merge(lsts):
 
 def find_sub_subspaces(matrixrows):
     return [list(space) for space in merge([[el[0] for el in row] for rownum, row in matrixrows.items()])]
+
+
+def linear_solve(augmatrix, fvars):
+    #return sympy.solve_linear_system(augmatrix,*fvars)
+    sols_set = linsolve(augmatrix, *fvars)
+    if not sols_set:
+        return {}
+    sols = dict(zip(fvars, list(sols_set)[0]))
+    return {var: sol for var, sol in sols.items() if var is not sol}
 
 def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector, iofvars, subs_rules, debug = False):
     sspacedict = dict(zip(sub_sub_space, range(len(sub_sub_space))))
@@ -411,7 +421,7 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector, iofvars, 
                     coeff_val = -sympify(augmatrix[row_ind,-1]).coeff(iofvar)
                     augmatrix[row_ind,-2] = coeff_val
                     augmatrix[row_ind,-1] += coeff_val*iofvar
-    sols = sympy.solve_linear_system(augmatrix,*fvars)
+    sols = linear_solve(augmatrix, fvars)
     if not sols:
         print(repr(augmatrix))
         print(fvars)
@@ -449,7 +459,7 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
         solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
                                                 fvars, cvector, iofvars,
                                                 subs_rules))
-        print(str(i)+'/'+str(length_ss), end = '\r')
+        print(str(i+1)+'/'+str(length_ss), end = '\r')
     solvector = []
     newfvars = []
     oldfvars  = []
