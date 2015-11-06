@@ -389,7 +389,7 @@ def linear_solve(augmatrix, fvars):
     if not sols_set:
         return {}
     sols = dict(zip(fvars, list(sols_set)[0]))
-    return {var: sol for var, sol in sols.items() if var is not sol}
+    return {var: sympy.simplify(sol) for var, sol in sols.items() if var is not sol}
 
 def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector, iofvars, subs_rules, debug = False):
     sspacedict = dict(zip(sub_sub_space, range(len(sub_sub_space))))
