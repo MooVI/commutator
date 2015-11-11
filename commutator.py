@@ -200,6 +200,9 @@ def full_simplify_group(group):
 def multiply_groups(group_a, group_b):
     return simplify_group([a*b for a in group_a for b in group_b])
 
+def square_to_find_identity(group):
+    return simplify_group([a*a for a in group])
+
 def calculate_commutator(group_a,group_b):
     if not isinstance(group_a, list):
         group_a = [group_a]
@@ -208,7 +211,7 @@ def calculate_commutator(group_a,group_b):
     group = commute_group(group_a, group_b)
     return simplify_group(group)
 
-def find_order(expr,orders):
+def find_order(expr, orders):
     """Where order is power of small quantity, and orders a dict of
     symbols with their order.
     """
@@ -240,6 +243,14 @@ def neglect_to_order(expr, order, orders):
 def order_group(group, orders):
     return sorted(group, key = lambda a: find_order(a.scalar,orders))
 
+def check_group_at_least_order(group, order, orders):
+    for ncprod in group:
+        if find_order(ncprod.scalar, orders) < order:
+            if sympy.simplify(ncprod.scalar) != 0:
+                print('Error: ' + str(ncprod))
+                return False
+    return True
+                
 def print_group(group, breaks = True):
     if not hasattr(print_group, 'orders'):
         print_group.orders = {}
@@ -250,8 +261,10 @@ def print_group(group, breaks = True):
                 print('{'+ ('+'+'\n+'.join(str(a) for a in group)).replace('+-', '\u2212')+'}')
             if not breaks:
                 print(' + '.join(str(a) for a in group).replace('+ -', '\u2212'))
+        elif group:
+                print(group[0])
         else:
-            print(group[0])
+            print('0')
     else:
         print(group)
 
@@ -418,7 +431,7 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector, iofvars, 
                 oldfvars.append(iofvar)
                 augmatrix = augmatrix.col_insert(-1, sympy.zeros(augmatrix.rows,1))
                 for row_ind in range(len(augmatrix[:,0])):
-                    coeff_val = -sympify(augmatrix[row_ind,-1]).coeff(iofvar)
+                    coeff_val = -sympy.expand(augmatrix[row_ind,-1]).coeff(iofvar)
                     augmatrix[row_ind,-2] = coeff_val
                     augmatrix[row_ind,-1] += coeff_val*iofvar
     sols = linear_solve(augmatrix, fvars)
@@ -433,7 +446,7 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector, iofvars, 
         if oldfvar in sols:
             subs_rules.update({var: rule.subs(oldfvar, sols[oldfvar])
                           for var, rule in subs_rules.items()})
-            subs_rules[oldfvar] = sols[oldfvar]
+            subs_rules[oldfvar] = sympy.simplify(sols[oldfvar])
     return sols
     
                     
@@ -456,6 +469,8 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
         subs_rules = {}
     length_ss = len(sub_sub_spaces)
     for i, ss_space in enumerate(sub_sub_spaces):
+        #if i == 4:
+        #    ipdb.set_trace()
         solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
                                                 fvars, cvector, iofvars,
                                                 subs_rules))
@@ -472,6 +487,7 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
             solvector.append(newfvar)
             newfvars.append(newfvar)
             oldfvars.append(fvar)
+            print(str(fvar)+': ' + str(newfvar))
     if newfvars:
         rules = [sub for sub in zip(oldfvars, newfvars)]
         solvector = [sol.subs(rules) for sol in solvector]
