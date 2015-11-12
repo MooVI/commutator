@@ -1,6 +1,8 @@
 from sympy import symbols, I, pretty, sympify, Matrix
 from sympy.solvers.solveset import linsolve, linear_eq_to_matrix
 import ipdb
+import json
+import yaml
 from collections import OrderedDict
 import sympy
 
@@ -74,8 +76,11 @@ class Ncproduct:
 
     def __eq__(self, other):
         """Note == ignores the scalar field!"""
-        return self.product == other.product
-
+        try:
+            return self.product == other.product
+        except:
+            return False
+        
     def __len__(self):
         return len(self.product)
 
@@ -245,7 +250,7 @@ def order_group(group, orders):
 
 def check_group_at_least_order(group, order, orders):
     for ncprod in group:
-        if find_order(ncprod.scalar, orders) < order:
+        if find_order(ncprod.scalar, orders) <= order:
             if sympy.simplify(ncprod.scalar) != 0:
                 print('Error: ' + str(ncprod))
                 return False
@@ -280,6 +285,45 @@ def texify_group(group):
             return('$$'+group[0].texify()+'$$')
     else:
         return('$$'+group.texify()+'$$')
+
+
+def ordered_dump(data, stream=None, Dumper=yaml.Dumper, **kwds):
+    class OrderedDumper(Dumper):
+        pass
+    def _dict_representer(dumper, data):
+        return dumper.represent_mapping(
+            yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+            data.items())
+    OrderedDumper.add_representer(OrderedDict, _dict_representer)
+    return yaml.dump(data, stream, OrderedDumper, **kwds)
+
+
+def write_yaml(data, filename, **kwargs):
+    """Writes yaml to file. Use py:class:`OrderedDict` to preserve key
+    order.
+    """
+    if filename[-5:] != ".yaml":
+        filename = filename + ".yaml"
+    with open(filename, mode = 'w') as file_obj:
+        ordered_dump(data, stream=file_obj, default_flow_style = False,
+                     **kwargs)
+ 
+def save_group(group, filename, iofvars=None):
+  #  ipdb.set_trace()
+    if iofvars is None:
+        iofvars = [] 
+    data = OrderedDict([('group', group), ('iofvars', iofvars)])
+    write_yaml(data, filename)
+
+def load_group(filename, iofvars = None):
+    ext = '.yaml'
+    if filename[-5:] != ext:
+            filename = filename + ext
+    with open(filename) as f:
+        parsed = yaml.load(f)
+    if iofvars is not None:
+        iofvars[:] = parsed['iofvars']
+    return parsed['group']
 
 def substitute_group(group, subs_rules):
     temp = [Ncproduct(sympify(ncprod.scalar).subs((var, rule) for var, rule in subs_rules.items()),
@@ -467,6 +511,20 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
     solutions = {}
     if subs_rules is None:
         subs_rules = {}
+    #deal with empty rows
+    # for i, row in matrixrows.items():
+    #     if not row:
+    #         if sympy.simplify(cvector[i]) != 0:
+    #             poss = False
+    #             for iofvar in iofvars:
+    #                 if iofvar in cvector[i].atoms(sympy.Symbol):
+    #                     sub_sub_spaces.append([i])
+    #                     print('Warning, new sspace: ' + str(i))
+    #                     poss = True
+    #             if not poss:
+    #                 print(matrixrows)
+    #                 print(cvector)
+    #                 raise ValueError('Error term to cancel in null')
     length_ss = len(sub_sub_spaces)
     for i, ss_space in enumerate(sub_sub_spaces):
         #if i == 4:
@@ -507,6 +565,10 @@ def check_normalisable(psi, fvars, order, orders):
     cvector = []
     solutions = {}
     sparse_normalise(psi, order, orders, fvars, cvector, matrixrows)
+    for i, row in matrixrows.items():
+        if not row:
+            if sympy.simplify(cvector[i]) != 0:
+                raise ValueError('Non-normalisable')
     sub_sub_spaces = find_sub_subspaces(matrixrows)
     for ss_space in sub_sub_spaces:
         solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
