@@ -15,7 +15,7 @@ class Ncproduct:
             self.product = self.destringify(product)
         else:
             self.product = [product]
-            
+
     def __getitem__(self, ind):
         return Ncproduct(self.scalar, self.product[ind])
 
@@ -24,7 +24,7 @@ class Ncproduct:
 
     def get_operator(self,ind):
         return self.product[ind]
-    
+
     def __setitem__(self, ind, value):
         self.product[ind] = value
 
@@ -37,7 +37,7 @@ class Ncproduct:
             return [self, other]
         else:
             return [self]+other
-        
+
     def __radd__(self, other):
         """Note add just returns a list, as this is addition"""
         if not isinstance(other,list):
@@ -80,7 +80,7 @@ class Ncproduct:
             return self.product == other.product
         except:
             return False
-        
+
     def __len__(self):
         return len(self.product)
 
@@ -121,7 +121,7 @@ class Ncproduct:
 
 def postmultiply(group,a):
      return [b*a for b in group]
-        
+
 def premultiply(a, group):
     return [a*b for b in group]
 
@@ -134,7 +134,7 @@ def commute(a,b):
         return [0*a*b]
     else:
         return [2*a*b]
-    
+
 def commute_group(group_a, group_b):
     result = []
     for a in group_a:
@@ -244,7 +244,7 @@ def neglect_to_order(expr, order, orders):
     if expr.func == sympy.Add:
         expr = sympy.Add(*[neglect_to_order(term, order, orders) for term in expr.args])
     return expr
-            
+
 def order_group(group, orders):
     return sorted(group, key = lambda a: find_order(a.scalar,orders))
 
@@ -255,7 +255,7 @@ def check_group_at_least_order(group, order, orders):
                 print('Error: ' + str(ncprod))
                 return False
     return True
-                
+
 def print_group(group, breaks = True):
     if not hasattr(print_group, 'orders'):
         print_group.orders = {}
@@ -307,11 +307,11 @@ def write_yaml(data, filename, **kwargs):
     with open(filename, mode = 'w') as file_obj:
         ordered_dump(data, stream=file_obj, default_flow_style = False,
                      **kwargs)
- 
+
 def save_group(group, filename, iofvars=None):
   #  ipdb.set_trace()
     if iofvars is None:
-        iofvars = [] 
+        iofvars = []
     data = OrderedDict([('group', group), ('iofvars', iofvars)])
     write_yaml(data, filename)
 
@@ -348,7 +348,7 @@ def fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart):
                 matrixrows.append([])
                 fill_subspace_rows(ncprod, matrixrows, subspace, Jpart)
            row_to_fill[ind] = ncprod.scalar
-                
+
 def find_subspace(to_cancel, Jpart):
     subspace = OrderedDict()
     matrixrows = []
@@ -358,7 +358,7 @@ def find_subspace(to_cancel, Jpart):
             for row in matrixrows:
                 if row:
                     row.append(0)
-            matrixrows.append([]) 
+            matrixrows.append([])
             fill_subspace_rows(ncprod, matrixrows, subspace, Jpart)
     return subspace, matrixrows
 
@@ -369,11 +369,11 @@ def build_vector_to_cancel(to_cancel, subspace):
     return cvector
 
 
-        
+
 def print_subspace(subspace):
     for key, item in subspace.items():
         print(str(item)+ ': ' + ' '.join([Ncproduct.stringify(Ncproduct,a) for a in key]))
-        
+
 def sparse_fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart, ind_col):
         #pdb.set_trace()
         comm = calculate_commutator(Jpart, Ncproduct(1,to_cancel.product))
@@ -386,7 +386,7 @@ def sparse_fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart, ind_col):
                 matrixrows[ind_row] = []
                 sparse_fill_subspace_rows(ncprod, matrixrows, subspace, Jpart, ind_row)
            matrixrows[ind_row].append((ind_col, ncprod.scalar))
-                
+
 def sparse_find_subspace(to_cancel, Jpart):
     subspace = OrderedDict()
     matrixrows = {}
@@ -492,8 +492,8 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector, iofvars, 
                           for var, rule in subs_rules.items()})
             subs_rules[oldfvar] = sympy.simplify(sols[oldfvar])
     return sols
-    
-                    
+
+
 def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
                                     matrixrows, subspace, norm = True,
                                     fvarname = 'A', iofvars = None, subs_rules = None):
