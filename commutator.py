@@ -216,6 +216,9 @@ def calculate_commutator(group_a,group_b):
     group = commute_group(group_a, group_b)
     return simplify_group(group)
 
+def print_progress(i, length):
+    print(str(i+1)+'/'+str(length), end = '\r')
+
 def find_order(expr, orders):
     """Where order is power of small quantity, and orders a dict of
     symbols with their order.
@@ -352,7 +355,7 @@ def fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart):
 def find_subspace(to_cancel, Jpart):
     subspace = OrderedDict()
     matrixrows = []
-    for ncprod in to_cancel:
+    for i, ncprod in enumerate(to_cancel):
         if not tuple(ncprod.product) in subspace:
             subspace[tuple(ncprod.product)] = len(subspace)
             for row in matrixrows:
@@ -390,12 +393,14 @@ def sparse_fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart, ind_col):
 def sparse_find_subspace(to_cancel, Jpart):
     subspace = OrderedDict()
     matrixrows = {}
-    for ncprod in to_cancel:
+    length = len(to_cancel)
+    for i, ncprod in enumerate(to_cancel):
         if not tuple(ncprod.product) in subspace:
             ind = len(subspace)
             subspace[tuple(ncprod.product)] = ind
             matrixrows[ind] = []
             sparse_fill_subspace_rows(ncprod, matrixrows, subspace, Jpart, ind)
+        print_progress(i, length)
     return subspace, matrixrows
 
 def sparse_normalise(psi_total, order, orders, coeffs, cvector, matrixrows, start_ind = 0):
@@ -532,7 +537,7 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
         solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
                                                 fvars, cvector, iofvars,
                                                 subs_rules))
-        print(str(i+1)+'/'+str(length_ss), end = '\r')
+        print_progress(i, length_ss)
     solvector = []
     newfvars = []
     oldfvars  = []
@@ -568,10 +573,12 @@ def check_normalisable(psi, fvars, order, orders):
     for i, row in matrixrows.items():
         if not row:
             if sympy.simplify(cvector[i]) != 0:
-                raise ValueError('Non-normalisable')
+                raise ValueError('Non-normalisable: '+ str(cvector[i]))
     sub_sub_spaces = find_sub_subspaces(matrixrows)
-    for ss_space in sub_sub_spaces:
+    length_ss = len(sub_sub_spaces)
+    for i, ss_space in enumerate(sub_sub_spaces):
         solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
                                                 fvars, cvector, None,
                                                 None))
+        print_progress(i, length_ss)
     return solutions
