@@ -205,6 +205,13 @@ def full_simplify_group(group):
 def multiply_groups(group_a, group_b):
     return simplify_group([a*b for a in group_a for b in group_b])
 
+def square_group_to_order(group, order, split_orders):
+    return simplify_group([(a*b)
+                           for i in range(order+1)
+                           for a in group[split_orders[i]:split_orders[i+1]]
+                           for b in group[split_orders[(order-i)]:split_orders[(order-i+1)]]
+                           ])
+
 def square_to_find_identity(group):
     return simplify_group([a*a for a in group])
 
@@ -311,11 +318,15 @@ def write_yaml(data, filename, **kwargs):
         ordered_dump(data, stream=file_obj, default_flow_style = False,
                      **kwargs)
 
-def save_group(group, filename, iofvars=None):
+def save_group(group, filename, iofvars=None, split_orders = None):
   #  ipdb.set_trace()
     if iofvars is None:
         iofvars = []
-    data = OrderedDict([('group', group), ('iofvars', iofvars)])
+    if split_orders is None:
+        split_orders = []
+    data = OrderedDict([('group', group),
+                        ('iofvars', iofvars),
+                        ('split_orders', split_orders)])
     write_yaml(data, filename)
 
 def load_group(filename, iofvars = None):
@@ -328,10 +339,14 @@ def load_group(filename, iofvars = None):
         iofvars[:] = parsed['iofvars']
     return parsed['group']
 
-def substitute_group(group, subs_rules):
+def substitute_group(group, subs_rules, split_orders = None):
     temp = [Ncproduct(sympify(ncprod.scalar).subs((var, rule) for var, rule in subs_rules.items()),
-		     ncprod.product) for ncprod in group]
-    return full_simplify_group(temp)
+                     ncprod.product) for ncprod in group]
+    remove_zeros(temp)
+    if split_orders is not None:
+        split_orders[-1] = len(temp)
+    return temp
+
 
 def fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart):
     row_to_fill = matrixrows[subspace[tuple(to_cancel.product)]]
@@ -403,21 +418,19 @@ def sparse_find_subspace(to_cancel, Jpart):
         print_progress(i, length)
     return subspace, matrixrows
 
-def sparse_normalise(psi_total, order, orders, coeffs, cvector, matrixrows, start_ind = 0):
-    norm = multiply_groups(psi_total, psi_total)
-    to_zero = [ncprod.scalar for ncprod in norm if (find_order(ncprod.scalar, orders) <= order
-                                                    and ncprod.product)]
+def sparse_normalise(psi_total, order, orders, coeffs, cvector, matrixrows, split_orders, start_ind = 0):
+    norm = square_group_to_order(psi_total, order, split_orders)
+    to_cancel = [ncprod.scalar for ncprod in norm if ncprod.product]
     ind = start_ind
-    for term in to_zero:
+    for term in to_cancel:
         term = sympy.expand(term)
         matrixrows[ind] = []
         row = matrixrows[ind]
         for ind_col, coeff in enumerate(coeffs):
-            product = neglect_to_order(term.coeff(coeff), 0, orders)
+            product = term.coeff(coeff)
             if product != 0:
                 row.append((ind_col, product))
         const_term = term.as_coeff_add(*coeffs)[0]
-        const_term = neglect_to_order(const_term, order, orders)
         cvector.append(-const_term)
         ind+=1
 
@@ -500,8 +513,8 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector, iofvars, 
 
 
 def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
-                                    matrixrows, subspace, norm = True,
-                                    fvarname = 'A', iofvars = None, subs_rules = None):
+                                    matrixrows, subspace, norm = False,
+                                    fvarname = 'A', iofvars = None, subs_rules = None, split_orders = None):
     fvar_gen = sympy.numbered_symbols('fvar')
     fvars = [next(fvar_gen) for i in range(len(subspace))]
     psi_order = [Ncproduct(-fvars[subspace[key]], list(key))
@@ -510,7 +523,7 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
         psi_total = psi_lower + psi_order
         new_orders = orders.copy()
         new_orders.update(dict(zip(fvars, [order]*len(fvars))))
-        sparse_normalise(psi_total, order, new_orders, fvars, cvector, matrixrows, start_ind = len(fvars))
+        sparse_normalise(psi_total, order, new_orders, fvars, cvector, matrixrows, split_orders, start_ind = len(fvars))
     sub_sub_spaces = find_sub_subspaces(matrixrows)
     print(sub_sub_spaces)
     solutions = {}
@@ -565,11 +578,14 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
                            for i,key in enumerate(subspace)])
 
 
-def check_normalisable(psi, fvars, order, orders):
+
+def check_normalisable(psi, fvars, order, orders, split_orders, update_splits = True):
     matrixrows = {}
     cvector = []
     solutions = {}
-    sparse_normalise(psi, order, orders, fvars, cvector, matrixrows)
+    if update_splits:
+        split_orders.append(len(psi))
+    sparse_normalise(psi, order, orders, fvars, cvector, matrixrows, split_orders)
     for i, row in matrixrows.items():
         if not row:
             if sympy.simplify(cvector[i]) != 0:
