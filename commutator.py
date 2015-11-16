@@ -329,7 +329,7 @@ def save_group(group, filename, iofvars=None, split_orders = None):
                         ('split_orders', split_orders)])
     write_yaml(data, filename)
 
-def load_group(filename, iofvars = None):
+def load_group(filename, iofvars = None, split_orders = None):
     ext = '.yaml'
     if filename[-5:] != ext:
             filename = filename + ext
@@ -337,6 +337,8 @@ def load_group(filename, iofvars = None):
         parsed = yaml.load(f)
     if iofvars is not None:
         iofvars[:] = parsed['iofvars']
+    if split_orders is not None:
+        split_orders[:] = parsed['split_orders']
     return parsed['group']
 
 def substitute_group(group, subs_rules, split_orders = None):
@@ -585,6 +587,11 @@ def check_normalisable(psi, fvars, order, orders, split_orders, update_splits = 
     solutions = {}
     if update_splits:
         split_orders.append(len(psi))
+    if not fvars:
+        norm = square_group_to_order(psi, order, split_orders)
+        to_cancel = [ncprod for ncprod in norm if ncprod.product]
+        if to_cancel:
+           raise ValueError('Non-normalisable: '+ str(to_cancel))
     sparse_normalise(psi, order, orders, fvars, cvector, matrixrows, split_orders)
     for i, row in matrixrows.items():
         if not row:

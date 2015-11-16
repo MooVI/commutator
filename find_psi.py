@@ -25,7 +25,7 @@ START_PSI = (N(1, 'a1')
 START_IOFVARS = []
 START_SPLIT_ORDERS = [0, 1, 3]
 
-#START_PSI = comm.load_group('testpsi_r4', START_IOFVARS)
+#START_PSI = comm.load_group('testpsi_r4', START_IOFVARS, START_SPLIT_ORDERS)
 
 orders.update(zip(START_IOFVARS,[START_ORDER-1]*len(START_IOFVARS)))
 
