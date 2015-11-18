@@ -342,7 +342,7 @@ def load_group(filename, iofvars = None, split_orders = None):
     return parsed['group']
 
 def substitute_group(group, subs_rules, split_orders = None):
-    temp = [Ncproduct(sympify(ncprod.scalar).subs((var, rule) for var, rule in subs_rules.items()),
+    temp = [Ncproduct(sympify(ncprod.scalar).xreplace(subs_rules),
                      ncprod.product) for ncprod in group]
     remove_zeros(temp)
     if split_orders is not None:
@@ -487,7 +487,7 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector, iofvars, 
         atoms = augmatrix.atoms(sympy.Symbol)
         for iofvar in subs_rules:
             if iofvar in atoms:
-                augmatrix = augmatrix.subs(iofvar,subs_rules[iofvar])
+                augmatrix = augmatrix.xreplace({iofvar: subs_rules[iofvar]})
         atoms = augmatrix.atoms(sympy.Symbol)
         for iofvar in iofvars:
             if iofvar not in subs_rules and iofvar in atoms:
@@ -508,7 +508,7 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector, iofvars, 
         raise ValueError("Failure. No solutions.")
     for oldfvar in oldfvars:
         if oldfvar in sols:
-            subs_rules.update({var: rule.subs(oldfvar, sols[oldfvar])
+            subs_rules.update({var: rule.xreplace({oldfvar: sols[oldfvar]})
                           for var, rule in subs_rules.items()})
             subs_rules[oldfvar] = sympy.simplify(sols[oldfvar])
     return sols
@@ -567,17 +567,16 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
             oldfvars.append(fvar)
             print(str(fvar)+': ' + str(newfvar))
     if newfvars:
-        rules = [sub for sub in zip(oldfvars, newfvars)]
-        solvector = [sol.subs(rules) for sol in solvector]
+        rules = dict(zip(oldfvars, newfvars))
+        solvector = [sol.xreplace(rules) for sol in solvector]
         if iofvars is not None:
             iofvars[:] = newfvars
     if not subs_rules:
         return simplify_group([Ncproduct(-solvector[i], list(key))
                            for i,key in enumerate(subspace)])
     else:
-        return simplify_group([Ncproduct(-solvector[i].subs(
-            [(var, rule) for var, rule in subs_rules.items()]), list(key))
-                           for i,key in enumerate(subspace)])
+        return simplify_group([Ncproduct(-solvector[i].xreplace(subs_rules), list(key))
+                               for i,key in enumerate(subspace)])
 
 
 
