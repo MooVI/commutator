@@ -17,7 +17,7 @@ Jpart = [N(I*J, [2*j+2,2*j+3]) for j in range(L-1)]
 H = fpart + Vpart +Jpart
 
 START_ORDER = 2
-END_ORDER = 8
+END_ORDER = 5
 
 START_PSI = (N(1, 'a1')
              + N(f/J, 'a2') + N(V/(I*J), 'b1 a2 a3'))
@@ -29,7 +29,7 @@ START_SPLIT_ORDERS = [0, 1, 3]
 
 orders.update(zip(START_IOFVARS,[START_ORDER-1]*len(START_IOFVARS)))
 
-FILEHEAD = 'speedpsi3'
+FILEHEAD = 'testpsi'
 NORM_AS_YOU_GO = True
 
 
