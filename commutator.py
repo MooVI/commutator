@@ -487,7 +487,7 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector, iofvars, 
         atoms = augmatrix.atoms(sympy.Symbol)
         for iofvar in subs_rules:
             if iofvar in atoms:
-                augmatrix = augmatrix.subs(iofvar, subs_rules[iofvar])
+                augmatrix = augmatrix.xreplace({iofvar: subs_rules[iofvar]})
         atoms = augmatrix.atoms(sympy.Symbol)
         for iofvar in iofvars:
             if iofvar not in subs_rules and iofvar in atoms:
