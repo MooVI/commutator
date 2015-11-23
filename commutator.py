@@ -1,10 +1,12 @@
 from sympy import symbols, I, pretty, sympify, Matrix
 from sympy.solvers.solveset import linsolve, linear_eq_to_matrix
+from sympy.core.evalf import chop_parts
 import ipdb
 import json
 import yaml
 from collections import OrderedDict
 import sympy
+import random
 
 class Ncproduct:
     def __init__(self, scalar, product):
@@ -460,13 +462,32 @@ def find_sub_subspaces(matrixrows):
     return [list(space) for space in merge([[el[0] for el in row] for rownum, row in matrixrows.items()])]
 
 
+def iszerofunc(x, softprec = 10, tries = 3, hardprec = 16):
+    if x==0:
+        return True
+    x = sympify(x)
+    if x.is_zero:
+        return True
+    else:
+        symbols = list(x.atoms(sympy.Symbol))
+        for i in range(tries):
+            rand_subs = dict(zip(symbols, [random.random() for _ in symbols]))
+            re, im = x.xreplace(rand_subs).evalf(hardprec).as_real_imag()
+            r = chop_parts((re._to_mpmath(18, allow_ints=False)._mpf_,
+                            im._to_mpmath(18, allow_ints=False)._mpf_,
+                            None, None), softprec)
+
+            if r[0] is not None or r[1] is not None:
+                return False
+        return True
+
 def linear_solve(augmatrix, fvars):
     #return sympy.solve_linear_system(augmatrix,*fvars)
-    sols_set = linsolve(augmatrix, *fvars)
+    sols_set = linsolve(augmatrix, *fvars, simplify=False, iszerofunc = iszerofunc)
     if not sols_set:
         return {}
     sols = dict(zip(fvars, list(sols_set)[0]))
-    return {var: sympy.simplify(sol) for var, sol in sols.items() if var is not sol}
+    return {var: sol for var, sol in sols.items() if var is not sol}
 
 def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector, iofvars, subs_rules, debug = False):
     sspacedict = dict(zip(sub_sub_space, range(len(sub_sub_space))))
@@ -497,7 +518,8 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector, iofvars, 
                 for row_ind in range(len(augmatrix[:,0])):
                     coeff_val = -sympy.expand(augmatrix[row_ind,-1]).coeff(iofvar)
                     augmatrix[row_ind,-2] = coeff_val
-                    augmatrix[row_ind,-1] += coeff_val*iofvar
+                    if coeff_val != 0:
+                        augmatrix[row_ind,-1] = augmatrix[row_ind,-1].xreplace({iofvar: 0})
     sols = linear_solve(augmatrix, fvars)
     if not sols:
         print(repr(augmatrix))
