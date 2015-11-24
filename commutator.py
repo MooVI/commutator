@@ -295,8 +295,9 @@ def order_group(group, orders):
 def check_group_at_least_order(group, order, orders):
     for ncprod in group:
         if find_order(ncprod.scalar, orders) <= order:
-            if sympy.simplify(ncprod.scalar) != 0:
-                print('Error: ' + str(ncprod))
+            test = sympy.simplify(ncprod.scalar)
+            if test != 0 and find_order(test, orders) <= order:
+                print('Error: ' + str(test) + ': ' + str(ncprod.product))
                 return False
     return True
 
