@@ -5,6 +5,17 @@ import json
 import yaml
 from collections import OrderedDict
 import sympy
+from subprocess import check_output
+import re
+from sympy.parsing.mathematica import mathematica
+
+command='/usr/bin/runMath'
+
+
+
+def multiple_replace(string, rep_dict):
+    pattern = re.compile("|".join([re.escape(k) for k in rep_dict.keys()]), re.M)
+    return pattern.sub(lambda x: rep_dict[x.group(0)], string)
 
 class Ncproduct:
     def __init__(self, scalar, product):
@@ -462,13 +473,17 @@ def find_sub_subspaces(matrixrows):
 
 def linear_solve(augmatrix, fvars):
     #return sympy.solve_linear_system(augmatrix,*fvars)
-    sols_set = linsolve(augmatrix, *fvars)
-    if not sols_set:
+    mstr = multiple_replace(str(augmatrix)[7:-1],{ '[':'{',']':'}', '**':'^'})
+    parameter = 'M = ' +mstr +'; Simplify[LinearSolve[M[[1 ;; -1, 1 ;; -2]], M[[All, -1]]]]'
+    sols_list =  [mathematica(sol)
+                 for sol in check_output([command,parameter])[0:-1].decode("utf-8")[1:-1].split(',')]
+    #ipdb.set_trace()
+    if not sols_list:
         return {}
-    sols = dict(zip(fvars, list(sols_set)[0]))
-    return {var: sympy.simplify(sol) for var, sol in sols.items() if var is not sol}
+    sols = dict(zip(fvars, sols_list))
+    return {var: sol for var, sol in sols.items() if var is not sol}
 
-def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector, iofvars, subs_rules, debug = False):
+def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector, iofvars, subs_rules):
     sspacedict = dict(zip(sub_sub_space, range(len(sub_sub_space))))
     length = len(sub_sub_space)
     augmatrixrows = []
