@@ -498,9 +498,9 @@ def find_sub_subspaces(matrixrows):
 def linear_solve(augmatrix, fvars):
     #return sympy.solve_linear_system(augmatrix,*fvars)
     mstr = multiple_replace(str(augmatrix)[7:-1],{ '[':'{',']':'}', '**':'^'})
-    parameter = 'M = ' +mstr +'; Simplify[LinearSolve[M[[1 ;; -1, 1 ;; -2]], M[[All, -1]]]]'
-    sols_list =  [mathematica(sol)
-                 for sol in check_output([command,parameter])[0:-1].decode("utf-8")[1:-1].split(',')]
+    parameter = 'M = ' +mstr +'; ToString[Simplify[LinearSolve[M[[1 ;; -1, 1 ;; -2]], M[[All, -1]]]], InputForm]'
+    sols_list =  [sympify(sol.replace('^', '**'))
+                  for sol in check_output([command,parameter])[1:-2].decode("utf-8").split(',')]
     #ipdb.set_trace()
     if not sols_list:
         return {}
