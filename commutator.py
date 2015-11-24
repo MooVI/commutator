@@ -10,7 +10,7 @@ from subprocess import check_output
 import re
 from sympy.parsing.mathematica import mathematica
 
-command='/usr/bin/runMath'
+command='/home/kempj/bin/runMath'
 
 
 
