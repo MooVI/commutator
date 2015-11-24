@@ -19,13 +19,13 @@ H = fpart + Vpart +Jpart
 START_ORDER = 2
 END_ORDER = 5
 
-START_PSI = (N(1, 'a1')
-             + N(f/J, 'a2') + N(V/(I*J), 'b1 a2 a3'))
+#START_PSI = (N(1, 'a1')
+#             + N(f/J, 'a2') + N(V/(I*J), 'b1 a2 a3'))
 
 START_IOFVARS = []
-START_SPLIT_ORDERS = [0, 1, 3]
+START_SPLIT_ORDERS = []
 
-#START_PSI = comm.load_group('testpsi_r4', START_IOFVARS, START_SPLIT_ORDERS)
+START_PSI = comm.load_group('speedpsi3_r6', START_IOFVARS, START_SPLIT_ORDERS)
 
 orders.update(zip(START_IOFVARS,[START_ORDER-1]*len(START_IOFVARS)))
 
@@ -40,7 +40,7 @@ split_orders = START_SPLIT_ORDERS
 for test_order in range(START_ORDER, END_ORDER+1):
     psi_sub = None
     psi_test_sub = None
-    
+
     Hcomm = c(H, psi)
     if not comm.check_group_at_least_order(Hcomm, test_order-1, orders):
         raise ValueError('Psi does not to order '+str(test_order-1)+'!')
@@ -64,7 +64,7 @@ for test_order in range(START_ORDER, END_ORDER+1):
         print(str(x)+': ' +str(subs_rules[x]))
     print('\n')
     psi = comm.substitute_group(psi, subs_rules, split_orders)
-    
+
     orders.update(zip(iofvars,[test_order]*len(iofvars)))
     normdict = comm.check_normalisable(psi+psi_test, iofvars, test_order, orders, split_orders)
     for x in sorted(normdict.keys(), key = lambda x: int(str(x)[2+len(str(test_order)):])):
@@ -83,12 +83,12 @@ for test_order in range(START_ORDER, END_ORDER+1):
             f.write(str(prop)+'\n\n')
             f.write(latex(prop).replace('\\\\', '\\'))
 
-    
+
 
 if not NORM_AS_YOU_GO:
     prop = comm.square_to_find_identity(psi_sub)[0].scalar
     with open(FILEHEAD+'_norm', mode = 'w') as f:
         f.write(str(prop)+'\n\n')
         f.write(latex(prop).replace('\\\\', '\\'))
-        
+
 print('Done!')

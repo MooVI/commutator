@@ -1,9 +1,10 @@
 from sympy import symbols, I, pretty, sympify, Matrix
 from sympy.solvers.solveset import linsolve, linear_eq_to_matrix
+from bisect import bisect_right
 import ipdb
 import json
 import yaml
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 import sympy
 from subprocess import check_output
 import re
@@ -223,8 +224,30 @@ def square_group_to_order(group, order, split_orders):
                            for b in group[split_orders[(order-i)]:split_orders[(order-i+1)]]
                            ])
 
+def square_group_to_order(group, order, split_orders):
+    return simplify_group([(a*b)
+                           for i in range(order+1)
+                           for a in group[split_orders[i]:split_orders[i+1]]
+                           for b in group[split_orders[(order-i)]:split_orders[(order-i+1)]]
+                           ])
+
 def square_to_find_identity(group):
-    return simplify_group([a*a for a in group])
+    return simplify_group([a*a for a in collect_terms(group)])
+
+def square_to_find_identity_scalar_up_to_order(group, order, split_orders):
+    D = defaultdict(dict)
+    for i,ncprod in enumerate(group):
+        D[tuple(ncprod.product)].update({bisect_right(split_orders,i)-1: i})
+    result = 0
+    for torder in range(order+1):
+        for product, positions in D.items():
+            for iorder, index in positions.items():
+                jorder = torder - iorder
+                if jorder in positions:
+                    result += (group[positions[iorder]].scalar
+                               *group[positions[jorder]].scalar
+                               *((2-(len(product)%4))))
+    return sympy.expand(result)
 
 def calculate_commutator(group_a,group_b):
     if not isinstance(group_a, list):
