@@ -6,13 +6,11 @@ import json
 import yaml
 from collections import OrderedDict, defaultdict
 import sympy
-from subprocess import check_output
 import re
+from subprocess import check_output
 from sympy.parsing.mathematica import mathematica
 
 command='/home/kempj/bin/runMath'
-
-
 
 def multiple_replace(string, rep_dict):
     pattern = re.compile("|".join([re.escape(k) for k in rep_dict.keys()]), re.M)
@@ -495,19 +493,36 @@ def find_sub_subspaces(matrixrows):
     return [list(space) for space in merge([[el[0] for el in row] for rownum, row in matrixrows.items()])]
 
 
-def linear_solve(augmatrix, fvars):
+def linear_solve(augmatrix, fvars, fvargen, newfvars):
     #return sympy.solve_linear_system(augmatrix,*fvars)
     mstr = multiple_replace(str(augmatrix)[7:-1],{ '[':'{',']':'}', '**':'^'})
-    parameter = 'M = ' +mstr +'; ToString[Simplify[LinearSolve[M[[1 ;; -1, 1 ;; -2]], M[[All, -1]]]], InputForm]'
+    parameter = ('M = ' + mstr + ';'
+                 'ToString['
+                 '{'
+                 'Simplify[LinearSolve[M[[1 ;; -1, 1 ;; -2]], M[[All, -1]]]], TBS,'
+                 'NullSpace[M[[1 ;; -1, 1 ;; -2]]]'
+                 '}'
+                 ', InputForm]')
+    solstring, nullstring = check_output([command,parameter])[2:-3].decode("utf-8").split(', TBS, '))
     sols_list =  [sympify(sol.replace('^', '**'))
-                  for sol in check_output([command,parameter])[1:-2].decode("utf-8").split(',')]
+                  for sol in solstring[1:-1].split(',')]
+    if len(nullstring) > 2:
+        sepvecs = nullstring[1:-1].split('},')
+        sepvecs[-1] = sepvecs[-1][:-1]
+        for nullvec in sepvecs:
+            newfvars.append(next(fvargen))
+            sols_list = [sol+newfvars[-1]*sympify(nullvecel)
+                         for sol, nullvecel in zip(sols_list, nullvec[1:].split(','))]
     #ipdb.set_trace()
     if not sols_list:
         return {}
     sols = dict(zip(fvars, sols_list))
     return {var: sol for var, sol in sols.items() if var is not sol}
 
-def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector, iofvars, subs_rules):
+def solve_for_sub_subspace(matrixrows, sub_sub_space,
+                           coeffs, cvector,
+                           iofvars, subs_rules,
+                           fvargen, newfvars):
     sspacedict = dict(zip(sub_sub_space, range(len(sub_sub_space))))
     length = len(sub_sub_space)
     augmatrixrows = []
@@ -537,7 +552,7 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector, iofvars, 
                     coeff_val = -sympy.expand(augmatrix[row_ind,-1]).coeff(iofvar)
                     augmatrix[row_ind,-2] = coeff_val
                     augmatrix[row_ind,-1] += coeff_val*iofvar
-    sols = linear_solve(augmatrix, fvars)
+    sols = linear_solve(augmatrix, fvars, fvargen, newfvars)
     if not sols:
         print(repr(augmatrix))
         print(fvars)
@@ -585,29 +600,19 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
     #                 print(cvector)
     #                 raise ValueError('Error term to cancel in null')
     length_ss = len(sub_sub_spaces)
+    fvargen = sympy.numbered_symbols(fvarname)
+    newfvars = []
     for i, ss_space in enumerate(sub_sub_spaces):
         #if i == 4:
         #    ipdb.set_trace()
         solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
                                                 fvars, cvector, iofvars,
-                                                subs_rules))
+                                                subs_rules, fvargen, newfvars))
         print_progress(i, length_ss)
     solvector = []
-    newfvars = []
-    oldfvars  = []
-    freevars_gen = sympy.numbered_symbols(fvarname)
     for fvar in fvars:
-        try:
-            solvector.append(solutions[fvar])
-        except KeyError:
-            newfvar = next(freevars_gen)
-            solvector.append(newfvar)
-            newfvars.append(newfvar)
-            oldfvars.append(fvar)
-            print(str(fvar)+': ' + str(newfvar))
+        solvector.append(solutions[fvar])
     if newfvars:
-        rules = dict(zip(oldfvars, newfvars))
-        solvector = [sol.xreplace(rules) for sol in solvector]
         if iofvars is not None:
             iofvars[:] = newfvars
     if not subs_rules:
