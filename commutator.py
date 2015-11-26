@@ -503,12 +503,16 @@ def linear_solve(augmatrix, fvars, fvargen, newfvars):
                  'NullSpace[M[[1 ;; -1, 1 ;; -2]]]'
                  '}'
                  ', InputForm]')
-    solstring, nullstring = check_output([command,parameter])[2:-3].decode("utf-8").split(', TBS, '))
-    sols_list =  [sympify(sol.replace('^', '**'))
-                  for sol in solstring[1:-1].split(',')]
+    solstring, nullstring = check_output([command,parameter])[2:-3].decode("utf-8").split(', TBS, ')
+    #print(solstring)
+    #print(check_output([command,parameter])[2:-3].decode("utf-8").split(', TBS, '))
+    try:
+        sols_list =  [sympify(sol.replace('^', '**'))
+                      for sol in solstring[:-1].split(',')]
+    except:
+        return {}
     if len(nullstring) > 2:
-        sepvecs = nullstring[1:-1].split('},')
-        sepvecs[-1] = sepvecs[-1][:-1]
+        sepvecs = nullstring[1:-1].split('}, ')
         for nullvec in sepvecs:
             newfvars.append(next(fvargen))
             sols_list = [sol+newfvars[-1]*sympify(nullvecel)
@@ -611,7 +615,11 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
         print_progress(i, length_ss)
     solvector = []
     for fvar in fvars:
-        solvector.append(solutions[fvar])
+        try:
+            solvector.append(solutions[fvar])
+        except KeyError:
+            newfvars.append(next(fvargen))
+            solvector.append(newfvars[-1])
     if newfvars:
         if iofvars is not None:
             iofvars[:] = newfvars
@@ -645,6 +653,6 @@ def check_normalisable(psi, fvars, order, orders, split_orders, update_splits = 
     for i, ss_space in enumerate(sub_sub_spaces):
         solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
                                                 fvars, cvector, None,
-                                                None))
+                                                None, None, None))
         print_progress(i, length_ss)
     return solutions
