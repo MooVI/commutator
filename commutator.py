@@ -493,7 +493,7 @@ def find_sub_subspaces(matrixrows):
     return [list(space) for space in merge([[el[0] for el in row] for rownum, row in matrixrows.items()])]
 
 
-def linear_solve(augmatrix, fvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars):
+def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars):
     #return sympy.solve_linear_system(augmatrix,*fvars)
     mstr = multiple_replace(str(augmatrix)[7:-1],{ '[':'{',']':'}', '**':'^'})
     parameter = ('M = ' + mstr + ';'
@@ -566,7 +566,7 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space,
                     coeff_val = -sympy.expand(augmatrix[row_ind,-1]).coeff(iofvar)
                     augmatrix[row_ind,-2] = coeff_val
                     augmatrix[row_ind,-1] += coeff_val*iofvar
-    sols = linear_solve(augmatrix, fvars, fvargen, newfvars, tempgen, tempvars, len(oldfvars))
+    sols = linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len(oldfvars))
     if not sols:
         print(repr(augmatrix))
         print(fvars)
@@ -672,6 +672,6 @@ def check_normalisable(psi, fvars, order, orders, split_orders, update_splits = 
     for i, ss_space in enumerate(sub_sub_spaces):
         solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
                                                 fvars, cvector, None,
-                                                None, None, None))
+                                                None, None, None, None, None))
         print_progress(i, length_ss)
     return solutions
