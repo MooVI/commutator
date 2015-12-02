@@ -351,18 +351,21 @@ def write_yaml(data, filename, **kwargs):
         ordered_dump(data, stream=file_obj, default_flow_style = False,
                      **kwargs)
 
-def save_group(group, filename, iofvars=None, split_orders = None):
+def save_group(group, filename, iofvars=None, split_orders = None, normdict = None):
   #  ipdb.set_trace()
     if iofvars is None:
         iofvars = []
     if split_orders is None:
         split_orders = []
+    if normdict is None:
+        normdict = []
     data = OrderedDict([('group', group),
                         ('iofvars', iofvars),
-                        ('split_orders', split_orders)])
+                        ('split_orders', split_orders),
+                        ('normdict', normdict)])
     write_yaml(data, filename)
 
-def load_group(filename, iofvars = None, split_orders = None):
+def load_group(filename, iofvars = None, split_orders = None, normdict = None):
     ext = '.yaml'
     if filename[-5:] != ext:
             filename = filename + ext
@@ -372,6 +375,8 @@ def load_group(filename, iofvars = None, split_orders = None):
         iofvars[:] = parsed['iofvars']
     if split_orders is not None:
         split_orders[:] = parsed['split_orders']
+    if normdict is not None:
+        normdict.update(parsed['normdict'])
     return parsed['group']
 
 def substitute_group(group, subs_rules, split_orders = None):
@@ -420,8 +425,6 @@ def build_vector_to_cancel(to_cancel, subspace):
     for ncprod in to_cancel:
         cvector[subspace[tuple(ncprod.product)]] = ncprod.scalar
     return cvector
-
-
 
 def print_subspace(subspace):
     for key, item in subspace.items():

@@ -39,9 +39,6 @@ iofvars = START_IOFVARS
 split_orders = START_SPLIT_ORDERS
 
 for test_order in range(START_ORDER, END_ORDER+1):
-    psi_sub = None
-    psi_test_sub = None
-
     Hcomm = c(H, psi)
     if not comm.check_group_at_least_order(Hcomm, test_order-1, orders):
         raise ValueError('Psi does not to order '+str(test_order-1)+'!')
@@ -67,19 +64,19 @@ for test_order in range(START_ORDER, END_ORDER+1):
     psi = comm.substitute_group(psi, subs_rules, split_orders)
 
     orders.update(zip(iofvars,[test_order]*len(iofvars)))
-    normdict = comm.check_normalisable(psi+psi_test, iofvars, test_order, orders, split_orders)
-    for x in sorted(normdict.keys(), key = lambda x: int(str(x)[2+len(str(test_order)):])):
-        print(str(x)+': ' +str(normdict[x]))
-    psi_test_sub = comm.substitute_group(psi_test, normdict)
-    psi_sub = psi + psi_test_sub
-    comm.save_group(psi_sub, FILEHEAD)
+    try:
+        normdict = comm.check_normalisable(psi+psi_test, iofvars, test_order, orders, split_orders)
+        for x in sorted(normdict.keys(), key = lambda x: int(str(x)[2+len(str(test_order)):])):
+            print(str(x)+': ' +str(normdict[x]))
+    except ValueError as e:
+        print(str(e))
 
     psi += psi_test
     comm.save_group(psi,
                     FILEHEAD + '_r' + str(test_order), iofvars=iofvars, split_orders=split_orders)
 
     if NORM_AS_YOU_GO:
-        prop = comm.square_to_find_identity(psi_sub)[0].scalar
+        prop = comm.square_to_find_identity_scalar_up_to_order(psi, test_order, split_orders)
         with open(FILEHEAD+'_norm', mode = 'w') as f:
             f.write(str(prop)+'\n\n')
             f.write(latex(prop).replace('\\\\', '\\'))
