@@ -32,6 +32,9 @@ class Ncproduct:
     def is_product(self):
         return len(self.product) > 1
 
+    def is_identity(self):
+        return len(self.product) == 0
+
     def __add__(self, other):
         """Note add just returns a list, as this is addition"""
         if not isinstance(other,list):
@@ -140,7 +143,8 @@ def commute_group(group_a, group_b):
     result = []
     for a in group_a:
         for b in group_b:
-            result += commute(a,b)
+            if not (a.is_identity() or b.is_identity()):
+                result += commute(a,b)
     return result
 
 def remove_zeros(group):
