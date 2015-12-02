@@ -632,3 +632,47 @@ def check_normalisable(psi, fvars, order, orders, split_orders, update_splits = 
                                                 None))
         print_progress(i, length_ss)
     return solutions
+
+
+def _build_entire_subspace(result, former, start, end):
+    for i in range(start, end):
+        term = former + [i]
+        result[:] += [term]
+        _build_entire_subspace(result, term, i+1, end)
+
+def build_entire_subspace(L):
+    start = 1
+    end = L*2
+    result = []
+    former = []
+    _build_entire_subspace(result, former, start, end)
+    return [Ncproduct(1, el) for el in result]
+
+def build_odd_subspace(L):
+    return [ncprod for ncprod in build_entire_subspace(L) if len(ncprod.product) % 2 == 1]
+
+def solve_at_once(H, L, iofvars = None):
+    subspace_ops = build_odd_subspace(L)
+    len_subspace = len(subspace_ops)
+    subspace = OrderedDict(zip([tuple(el.product) for el in subspace_ops],
+                                [i for i in range(len_subspace)]))
+    matrixrows = {}
+    for i in range(len_subspace):
+        matrixrows[i] = []
+    for ind_col in range(len_subspace):
+        comm = calculate_commutator(H, subspace_ops[ind_col])
+        for ncprod in comm:
+            ind_row = subspace[tuple(ncprod.product)]
+            matrixrows[ind_row].append((ind_col, ncprod.scalar))
+    cvector = [0]*len_subspace
+    if iofvars is None:
+        iofvars = []
+    return sparse_solve_for_commuting_term(cvector,
+                                       None,
+                                       None,
+                                       None,
+                                       matrixrows,
+                                       subspace,
+                                       norm = False,
+                                       fvarname = 'F',
+                                       iofvars=iofvars)
