@@ -720,6 +720,47 @@ def check_normalisable(psi, fvars, order, orders, split_orders, update_splits = 
     return solutions
 
 
+
+def truncate_fill(to_cancel, coeffs, matrixrows, cvector, start_ind = 0):
+    ind = start_ind
+    to_cancel = [el.scalar for el in to_cancel]
+    for term in to_cancel:
+        term = sympy.expand(term)
+        matrixrows[ind] = []
+        row = matrixrows[ind]
+        for ind_col, coeff in enumerate(coeffs):
+            product = term.coeff(coeff)
+            if product != 0:
+                row.append((ind_col, product))
+        const_term = term.as_coeff_add(*coeffs)[0]
+        cvector.append(-const_term)
+        ind+=1
+
+def check_truncate(to_cancel, fvars):
+    matrixrows = {}
+    cvector = []
+    solutions = {}
+    if not fvars:
+        if to_cancel:
+           return False
+    truncate_fill(to_cancel, fvars, matrixrows, cvector)
+    for i, row in matrixrows.items():
+        if not row:
+            if sympy.simplify(cvector[i]) != 0:
+                return False
+    sub_sub_spaces = find_sub_subspaces(matrixrows)
+    length_ss = len(sub_sub_spaces)
+    for i, ss_space in enumerate(sub_sub_spaces):
+        try:
+            solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
+                                                fvars, cvector, None,
+                                                None, None, None, None, None))
+        except Exception as e:
+            print(str(e))
+            return False
+        print_progress(i, length_ss)
+    return solutions
+
 def _build_entire_subspace(result, former, start, end):
     for i in range(start, end):
         term = former + [i]
