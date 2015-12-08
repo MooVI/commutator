@@ -198,6 +198,42 @@ def full_collect_terms(group):
         D[tuple(ncprod.product)].append(i)
     return [Ncproduct(sympy.simplify(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
 
+
+def mathematica_simplify(scalar):
+    sstr = str(scalar).replace('**','^')
+    parameter = ('ToString['
+                 'Simplify[' + sstr +']'
+                 ', InputForm]')
+    simpstring = check_output([command,parameter])[0:-1].decode("utf-8")
+    return sympify(simpstring.replace('^', '**'))
+
+def mathematica_series(scalar, varlist, order):
+    sstr = str(scalar).replace('**','^')
+    varsstr = ','.join(['{'+str(var) +', 0, ' + str(order) +'}' for var in varlist])
+    parameter = ('ToString[' +
+                 'Series['+
+                 sstr+
+                 ',' +varsstr+']'
+                 ', InputForm]')
+    simpstring = check_output([command,parameter])[0:-1].decode("utf-8")
+    return sympify(simpstring.replace('^', '**'))
+
+def math_collect_terms(group):
+    from collections import defaultdict
+    D = defaultdict(list)
+    for i,ncprod in enumerate(group):
+        D[tuple(ncprod.product)].append(i)
+    return [Ncproduct(mathematica_simplify(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
+
+def mathematica_simplify_group(group):
+    remove_zeros(group)
+    for ncprod in group:
+        sort_anticommuting_product(ncprod)
+        set_squares_to_identity(ncprod)
+    group = math_collect_terms(group)
+    remove_zeros(group)
+    return group
+
 def simplify_group(group):
     remove_zeros(group)
     for ncprod in group:
