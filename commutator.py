@@ -9,8 +9,10 @@ import sympy
 import re
 from subprocess import check_output
 from sympy.parsing.mathematica import mathematica
+import tempfile
+import os
 
-command='/home/kempj/bin/runMath'
+command='/home/kempj/bin/MathematicaScript'
 
 def multiple_replace(string, rep_dict):
     pattern = re.compile("|".join([re.escape(k) for k in rep_dict.keys()]), re.M)
@@ -499,23 +501,33 @@ def find_sub_subspaces(matrixrows):
 def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars):
     #return sympy.solve_linear_system(augmatrix,*fvars)
     mstr = multiple_replace(str(augmatrix)[7:-1],{ '[':'{',']':'}', '**':'^'})
-    parameter = ('M = ' + mstr + ';'
+    script = ('Print['
+                 'M = ' + mstr + ';'
                  'ToString['
                  '{'
                  'Simplify[LinearSolve[M[[1 ;; -1, 1 ;; -2]], M[[All, -1]]]], TBS,'
                  'NullSpace[M[[1 ;; -1, 1 ;; -2]]]'
                  '}'
-                 ', InputForm]')
-    solstring, nullstring = check_output([command,parameter])[2:-3].decode("utf-8").split(', TBS, ')
-    #print(solstring)
-    #print(check_output([command,parameter])[2:-3].decode("utf-8").split(', TBS, '))
-    #ipdb.set_trace()
+                 ', InputForm] ];')
+    script_file = tempfile.NamedTemporaryFile(mode = 'wt', delete=False)
+    checkstring = "Not set."
     try:
+        script_file.write(script)
+        script_file.close()
+        del script
+        checkstring = check_output([command, '-script', script_file.name])[2:-3].decode("utf-8").split(', TBS, ')
+        solstring, nullstring = checkstring
+        #print(solstring)
+        #print(check_output([command,parameter])[2:-3].decode("utf-8").split(', TBS, '))
+        #ipdb.set_trace()
         sols_list =  [sympify(sol.replace('^', '**'))
                       for sol in solstring[:-1].split(',')]
     except Exception as e:
         print(str(e))
+        print(checkstring)
         return {}
+    finally:
+        os.remove(script_file.name)
     if len(nullstring) > 2:
         sepvecs = nullstring[1:-1].split('}, ')
         for nullvec in sepvecs:
