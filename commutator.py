@@ -43,6 +43,9 @@ class Ncproduct:
     def is_product(self):
         return len(self.product) > 1
 
+    def is_identity(self):
+        return len(self.product) == 0
+
     def __add__(self, other):
         """Note add just returns a list, as this is addition"""
         if not isinstance(other,list):
@@ -151,7 +154,8 @@ def commute_group(group_a, group_b):
     result = []
     for a in group_a:
         for b in group_b:
-            result += commute(a,b)
+            if not (a.is_identity() or b.is_identity()):
+                result += commute(a,b)
     return result
 
 def remove_zeros(group):
@@ -195,6 +199,42 @@ def full_collect_terms(group):
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].append(i)
     return [Ncproduct(sympy.simplify(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
+
+
+def mathematica_simplify(scalar):
+    sstr = str(scalar).replace('**','^')
+    parameter = ('ToString['
+                 'Simplify[' + sstr +']'
+                 ', InputForm]')
+    simpstring = check_output([command,parameter])[0:-1].decode("utf-8")
+    return sympify(simpstring.replace('^', '**'))
+
+def mathematica_series(scalar, varlist, order):
+    sstr = str(scalar).replace('**','^')
+    varsstr = ','.join(['{'+str(var) +', 0, ' + str(order) +'}' for var in varlist])
+    parameter = ('ToString[' +
+                 'Series['+
+                 sstr+
+                 ',' +varsstr+']'
+                 ', InputForm]')
+    simpstring = check_output([command,parameter])[0:-1].decode("utf-8")
+    return sympify(simpstring.replace('^', '**'))
+
+def math_collect_terms(group):
+    from collections import defaultdict
+    D = defaultdict(list)
+    for i,ncprod in enumerate(group):
+        D[tuple(ncprod.product)].append(i)
+    return [Ncproduct(mathematica_simplify(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
+
+def mathematica_simplify_group(group):
+    remove_zeros(group)
+    for ncprod in group:
+        sort_anticommuting_product(ncprod)
+        set_squares_to_identity(ncprod)
+    group = math_collect_terms(group)
+    remove_zeros(group)
+    return group
 
 def simplify_group(group):
     remove_zeros(group)
@@ -542,7 +582,7 @@ def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars
                 newfvars.append(newfvar)
             sols_list = [sol+newfvar*sympify(nullvecel)
                          for sol, nullvecel in zip(sols_list, nullvec)]
-    #ipdb.set_trace()
+   #ipdb.set_trace()
     if not sols_list:
         return {}
     sols = dict(zip(fvars, sols_list))
@@ -635,8 +675,8 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
     newfvars = []
     for i, ss_space in enumerate(sub_sub_spaces):
         #if i == 4:
-        #    ipdb.set_trace()
-        solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
+        #ipdb.set_trace()
+        soluti1ons.update(solve_for_sub_subspace(matrixrows, ss_space,
                                                 fvars, cvector, iofvars,
                                                 subs_rules, fvargen, newfvars, tempgen, tempvars))
         print_progress(i, length_ss)
@@ -690,3 +730,88 @@ def check_normalisable(psi, fvars, order, orders, split_orders, update_splits = 
                                                 None, None, None, None, None))
         print_progress(i, length_ss)
     return solutions
+
+
+
+def truncate_fill(to_cancel, coeffs, matrixrows, cvector, start_ind = 0):
+    ind = start_ind
+    to_cancel = [el.scalar for el in to_cancel]
+    for term in to_cancel:
+        term = sympy.expand(term)
+        matrixrows[ind] = []
+        row = matrixrows[ind]
+        for ind_col, coeff in enumerate(coeffs):
+            product = term.coeff(coeff)
+            if product != 0:
+                row.append((ind_col, product))
+        const_term = term.as_coeff_add(*coeffs)[0]
+        cvector.append(-const_term)
+        ind+=1
+
+def check_truncate(to_cancel, fvars):
+    matrixrows = {}
+    cvector = []
+    solutions = {}
+    if not fvars:
+        if to_cancel:
+           return False
+    truncate_fill(to_cancel, fvars, matrixrows, cvector)
+    for i, row in matrixrows.items():
+        if not row:
+            if sympy.simplify(cvector[i]) != 0:
+                return False
+    sub_sub_spaces = find_sub_subspaces(matrixrows)
+    length_ss = len(sub_sub_spaces)
+    for i, ss_space in enumerate(sub_sub_spaces):
+        try:
+            solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
+                                                fvars, cvector, None,
+                                                None, None, None, None, None))
+        except Exception as e:
+            print(str(e))
+            return False
+        print_progress(i, length_ss)
+    return solutions
+
+def _build_entire_subspace(result, former, start, end):
+    for i in range(start, end):
+        term = former + [i]
+        result[:] += [term]
+        _build_entire_subspace(result, term, i+1, end)
+
+def build_entire_subspace(L):
+    start = 1
+    end = L*2
+    result = []
+    former = []
+    _build_entire_subspace(result, former, start, end)
+    return [Ncproduct(1, el) for el in result]
+
+def build_odd_subspace(L):
+    return [ncprod for ncprod in build_entire_subspace(L) if len(ncprod.product) % 2 == 1]
+
+def solve_at_once(H, L, iofvars = None):
+    subspace_ops = build_odd_subspace(L)
+    len_subspace = len(subspace_ops)
+    subspace = OrderedDict(zip([tuple(el.product) for el in subspace_ops],
+                                [i for i in range(len_subspace)]))
+    matrixrows = {}
+    for i in range(len_subspace):
+        matrixrows[i] = []
+    for ind_col in range(len_subspace):
+        comm = calculate_commutator(H, subspace_ops[ind_col])
+        for ncprod in comm:
+            ind_row = subspace[tuple(ncprod.product)]
+            matrixrows[ind_row].append((ind_col, ncprod.scalar))
+    cvector = [0]*len_subspace
+    if iofvars is None:
+        iofvars = []
+    return sparse_solve_for_commuting_term(cvector,
+                                       None,
+                                       None,
+                                       None,
+                                       matrixrows,
+                                       subspace,
+                                       norm = False,
+                                       fvarname = 'F',
+                                       iofvars=iofvars)
