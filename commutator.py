@@ -132,11 +132,41 @@ class Ncproduct:
         return ' '.join([tex]
                        +[self._texify_stringify(a) for a in self.product])
 
+
+class SigmaProduct(Ncproduct):
+    def stringify(self, a):
+        if a % 2 == 0:
+            return 'x' + str(a//2)
+        else:
+            return 'z' + str((a+1)//2)
+
+    def _texify_stringify(self, a):
+        if a % 2 == 0:
+            return '\\sigma^x_' + str(a//2)
+        else:
+            return '\\sigma^z_' + str((a+1)//2)
+
+    def destringify(self, string):
+        result = []
+        string = string.replace('\u22c5', ' ')
+        for op in string.split(' '):
+            if op[0] == 'z':
+                result.append(int(op[1:])*2-1)
+            elif op[0] == 'x':
+                result.append(int(op[1:])*2)
+            else:
+                print('Unknown operator ' + op)
+        return result
+
+
+
+
 def postmultiply(group,a):
      return [b*a for b in group]
 
 def premultiply(a, group):
     return [a*b for b in group]
+
 
 def commute(a,b):
     if a.is_product():
@@ -159,6 +189,27 @@ def commute_group(group_a, group_b):
 def remove_zeros(group):
     group[:] = (a for a in group if a.scalar != 0)
 
+
+def sort_pauli_product(ncprod):
+    i = 0
+    nflips = 0
+    a = ncprod.product
+    while i < len(a)-1:
+        diff = a[i] - a[i+1]
+        if diff > 0:
+            a[i], a[i+1] = a[i+1], a[i]
+            if diff == 1:
+                if a[i] % 2 == 1:
+                    nflips += 1
+            while i>0 and a[i] < a[i-1]:
+                a[i], a[i-1] = a[i-1], a[i]
+                if a[i] - a[i-1] == 1:
+                    if a[i-1] % 2 == 1:
+                        nflips +=1
+                i -= 1
+        i+=1
+    ncprod.scalar = ncprod.scalar * (-1)**nflips
+
 def sort_anticommuting_product(ncprod):
     i = 0
     nflips = 0
@@ -168,7 +219,7 @@ def sort_anticommuting_product(ncprod):
             a[i], a[i+1] = a[i+1],a[i]
             nflips += 1
             while i>0 and a[i] < a[i-1]:
-                a[i], a[i-1] = a[i-1],a[i]
+                a[i], a[i-1] = a[i-1], a[i]
                 nflips +=1
                 i -= 1
         i+=1
@@ -183,6 +234,44 @@ def set_squares_to_identity(ncprod):
             del a[i]
         else:
             i+=1
+
+def convert_to_sigma(ncprod):
+    #ipdb.set_trace()
+    ret = SigmaProduct(1, [])
+    ret.scalar = ncprod.scalar
+    for el in ncprod.product:
+        if el % 2 == 0:
+            ret.scalar *= I
+            ret.product += [i for i in range(2,el,2)]+ [el-1, el]
+        else:
+            ret.product += [i for i in range(2,el,2)]+[el]
+    sort_pauli_product(ret)
+    set_squares_to_identity(ret)
+    return ret
+
+
+def convert_from_sigma(sigma):
+    ret = Ncproduct(1, [])
+    ret.scalar = ncprod.scalar
+    for el in ncprod.product:
+        if el % 2 == 0:
+            ret.scalar *= -I
+            ret.product += [el-1, el]
+        else:
+            ret.product += [i for i in range(2,el)]+[el]
+    sort_anticommuting_product(ret)
+    set_squares_to_identity(ret)
+    return ret
+
+def convert_group(group):
+    if not isinstance(group, list):
+        group = [group]
+    if isinstance(group[0], Ncproduct):
+        return [convert_to_sigma(el) for el in group]
+    elif isinstance(group[0], SigmaProduct):
+        return [convert_from_sigma(el) for el in group]
+    else:
+        raise ValueError('Unrecognised conversion asked for!')
 
 def collect_terms(group):
     from collections import defaultdict
