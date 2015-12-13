@@ -676,7 +676,7 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
     for i, ss_space in enumerate(sub_sub_spaces):
         #if i == 4:
         #ipdb.set_trace()
-        soluti1ons.update(solve_for_sub_subspace(matrixrows, ss_space,
+        solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
                                                 fvars, cvector, iofvars,
                                                 subs_rules, fvargen, newfvars, tempgen, tempvars))
         print_progress(i, length_ss)
