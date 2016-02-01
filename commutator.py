@@ -789,7 +789,7 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
 
 
 
-def check_normalisable(psi, fvars, order, orders, split_orders, update_splits = True):
+def check_normalisable(psi, fvars, order, orders, split_orders, zero_not_needed = False, update_splits = True):
     matrixrows = {}
     cvector = []
     solutions = {}
@@ -812,6 +812,10 @@ def check_normalisable(psi, fvars, order, orders, split_orders, update_splits = 
                                                 fvars, cvector, None,
                                                 None, None, None, None, None))
         print_progress(i, length_ss)
+    if zero_not_needed:
+        for fvar in fvars:
+            if fvar not in solutions:
+                solutions[fvar] = 0
     return solutions
 
 
@@ -870,8 +874,19 @@ def build_entire_subspace(L):
     _build_entire_subspace(result, former, start, end)
     return [Ncproduct(1, el) for el in result]
 
+def build_norm_subspace(L):
+    start = 2
+    end = L*2
+    result = []
+    former = [1]
+    _build_entire_subspace(result, former, start, end)
+    return [Ncproduct(1, el) for el in result]
+
 def build_odd_subspace(L):
     return [ncprod for ncprod in build_entire_subspace(L) if len(ncprod.product) % 2 == 1]
+
+def build_odd_norm_subspace(L):
+    return [ncprod for ncprod in build_norm_subspace(L) if len(ncprod.product) % 2 == 1]
 
 def solve_at_once(H, L, iofvars = None):
     subspace_ops = build_odd_subspace(L)
@@ -898,3 +913,22 @@ def solve_at_once(H, L, iofvars = None):
                                        norm = False,
                                        fvarname = 'F',
                                        iofvars=iofvars)
+
+def fill_subspace(Jpart, order):
+    L = 2*order+1
+    subspace_ops = build_odd_norm_subspace(L)
+    len_subspace = len(subspace_ops)
+    matrixrows = defaultdict(list)
+    subspace = OrderedDict(zip([tuple(el.product) for el in subspace_ops],
+                                [i for i in range(len_subspace)]))
+    for product, ind_col in subspace.items():
+        comm = calculate_commutator(Jpart, Ncproduct(1, list(product)))
+        for ncprod in comm:
+           ind_row = subspace[tuple(ncprod.product)]
+           matrixrows[ind_row].append((ind_col, ncprod.scalar))
+    return subspace, matrixrows
+
+def fill_subspace_norm(Jpart, to_cancel, order):
+    L = 2*order+1
+    subspace_ops = build_odd_norm_subspace(L)
+    return sparse_find_subspace(to_cancel+subspace_ops, Jpart)
