@@ -252,13 +252,14 @@ def convert_to_sigma(ncprod):
 
 def convert_from_sigma(sigma):
     ret = Ncproduct(1, [])
-    ret.scalar = ncprod.scalar
-    for el in ncprod.product:
+    ret.scalar = sigma.scalar
+    for el in sigma.product:
         if el % 2 == 0:
             ret.scalar *= -I
             ret.product += [el-1, el]
         else:
-            ret.product += [i for i in range(2,el)]+[el]
+            ret.product += [i for i in range(1,el,1)]+[el]
+            ret.scalar *= (-I)**((el-1)//2)
     sort_anticommuting_product(ret)
     set_squares_to_identity(ret)
     return ret
@@ -535,6 +536,11 @@ def fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart):
                 matrixrows.append([])
                 fill_subspace_rows(ncprod, matrixrows, subspace, Jpart)
            row_to_fill[ind] = ncprod.scalar
+
+
+
+
+
 
 def find_subspace(to_cancel, Jpart):
     subspace = OrderedDict()
