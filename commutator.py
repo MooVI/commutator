@@ -144,9 +144,9 @@ class SigmaProduct(Ncproduct):
 
     def _texify_stringify(self, a):
         if a % 2 == 0:
-            return '\\sigma^x_' + str(a//2)
+            return '\\sigma^x_{' + str(a//2)+'}'
         else:
-            return '\\sigma^z_' + str((a+1)//2)
+            return '\\sigma^z_{' + str((a+1)//2)+'}'
 
     def destringify(self, string):
         result = []
@@ -447,18 +447,22 @@ def print_group(group, breaks = True):
     else:
         print(group)
 
-def texify_group(group):
+def texify_group(group, newlines = False):
     """Uses same orders as print_group"""
     if not hasattr(print_group, 'orders'):
         print_group.orders = {}
     if isinstance(group, list):
         if len(group) > 1:
-            group = order_group(group, print_group.orders)
-            return('$$'+' + '.join(a.texify() for a in group).replace('+ -', '-')+'$$')
+            if not newlines:
+                group = order_group(group, print_group.orders)
+                return('$$'+' + '.join(a.texify() for a in group).replace('+ -', '-').replace('\\\\','\\')+'$$')
+            else:
+                group = order_group(group, print_group.orders)
+                return('\\begin{align*}\n'+'\\\\\n'.join('&' + a.texify().replace('\\\\','\\') for a in group)+'\n\\end{align*}')
         else:
-            return('$$'+group[0].texify()+'$$')
+            return('$$'+group[0].texify().replace('\\\\','\\')+'$$')
     else:
-        return('$$'+group.texify()+'$$')
+        return('$$'+group.texify().replace('\\\\','\\')+'$$')
 
 
 def ordered_dump(data, stream=None, Dumper=yaml.Dumper, **kwds):
