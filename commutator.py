@@ -806,8 +806,6 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
             subs_rules.pop(tempvar, None)
         return ret
 
-
-
 def check_normalisable(psi, fvars, order, orders, split_orders, zero_not_needed = False, update_splits = True, make_norm = True):
     matrixrows = {}
     cvector = []
@@ -818,7 +816,7 @@ def check_normalisable(psi, fvars, order, orders, split_orders, zero_not_needed 
         norm = square_group_to_order(psi, order, split_orders)
         to_cancel = [ncprod for ncprod in norm if ncprod.product]
         for ncprod in to_cancel:
-            if sympy.simplify(cvector[i]) != 0:
+            if sympy.simplify(ncprod.scalar) != 0:
                 if make_norm and ncprod.product[0] != 1:
                     psi += [Ncproduct(-ncprod.scalar/2,[1]+ncprod.product)]
                     split_orders[-1] += 1
@@ -846,8 +844,6 @@ def check_normalisable(psi, fvars, order, orders, split_orders, zero_not_needed 
             if fvar not in solutions:
                 solutions[fvar] = 0
     return solutions
-
-
 
 def truncate_fill(to_cancel, coeffs, matrixrows, cvector, start_ind = 0):
     ind = start_ind
