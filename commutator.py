@@ -591,12 +591,14 @@ def sparse_find_subspace(to_cancel, Jpart):
         print_progress(i, length)
     return subspace, matrixrows
 
-def sparse_normalise(psi_total, order, orders, coeffs, cvector, matrixrows, split_orders, start_ind = 0):
+def sparse_normalise(psi_total, order, orders, coeffs, cvector, matrixrows, split_orders, start_ind = 0, subspace = None):
+    if subspace is None:
+        subspace = []
     norm = square_group_to_order(psi_total, order, split_orders)
-    to_cancel = [ncprod.scalar for ncprod in norm if ncprod.product]
+    to_cancel = [ncprod for ncprod in norm if ncprod.product]
     ind = start_ind
-    for term in to_cancel:
-        term = sympy.expand(term)
+    for ncprod in to_cancel:
+        term = sympy.expand(ncprod.scalar)
         matrixrows[ind] = []
         row = matrixrows[ind]
         for ind_col, coeff in enumerate(coeffs):
@@ -605,6 +607,7 @@ def sparse_normalise(psi_total, order, orders, coeffs, cvector, matrixrows, spli
                 row.append((ind_col, product))
         const_term = term.as_coeff_add(*coeffs)[0]
         cvector.append(-const_term)
+        subspace.append(Ncproduct(-const_term, ncprod.product))
         ind+=1
 
 def merge(lsts):
@@ -789,7 +792,7 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
 
 
 
-def check_normalisable(psi, fvars, order, orders, split_orders, zero_not_needed = False, update_splits = True):
+def check_normalisable(psi, fvars, order, orders, split_orders, zero_not_needed = False, update_splits = True, make_norm = True):
     matrixrows = {}
     cvector = []
     solutions = {}
@@ -798,13 +801,23 @@ def check_normalisable(psi, fvars, order, orders, split_orders, zero_not_needed 
     if not fvars:
         norm = square_group_to_order(psi, order, split_orders)
         to_cancel = [ncprod for ncprod in norm if ncprod.product]
-        if to_cancel:
-           raise ValueError('Non-normalisable: '+ str(to_cancel))
-    sparse_normalise(psi, order, orders, fvars, cvector, matrixrows, split_orders)
+        for ncprod in to_cancel:
+            if sympy.simplify(cvector[i]) != 0:
+                if make_norm and ncprod.product[0] != 1:
+                    psi += [Ncproduct(-ncprod.scalar/2,[1]+ncprod.product)]
+                    split_orders[-1] += 1
+                else:
+                    raise ValueError('Non-normalisable: '+ str(to_cancel))
+    subspace = []
+    sparse_normalise(psi, order, orders, fvars, cvector, matrixrows, split_orders, subspace=subspace)
     for i, row in matrixrows.items():
         if not row:
-            if sympy.simplify(cvector[i]) != 0:
-                raise ValueError('Non-normalisable: '+ str(cvector[i]))
+            if sympy.simplify(ncprod.scalar) != 0:
+                if make_norm and subspace[i].product[0] != 1:
+                    psi += [Ncproduct(subspace[i].scalar/2,[1]+subspace[i].product)]
+                    split_orders[-1] += 1
+                else:
+                    raise ValueError('Non-normalisable: '+ str(subspace[i]))
     sub_sub_spaces = find_sub_subspaces(matrixrows)
     length_ss = len(sub_sub_spaces)
     for i, ss_space in enumerate(sub_sub_spaces):
