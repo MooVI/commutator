@@ -18,6 +18,11 @@ def multiple_replace(string, rep_dict):
     pattern = re.compile("|".join([re.escape(k) for k in rep_dict.keys()]), re.M)
     return pattern.sub(lambda x: rep_dict[x.group(0)], string)
 
+def mathematica_parser(exprstring):
+    return sympify(exprstring.replace('^', '**'), mathematica_parser.vardict)
+
+mathematica_parser.vardict = {}
+
 class Ncproduct:
     def __init__(self, scalar, product):
         self.scalar = scalar
@@ -300,7 +305,7 @@ def mathematica_simplify(scalar):
                  'Simplify[' + sstr +']'
                  ', InputForm]')
     simpstring = check_output([command,parameter])[0:-1].decode("utf-8")
-    return sympify(simpstring.replace('^', '**'))
+    return mathematica_parser(simpstring)
 
 def mathematica_series(scalar, varlist, order):
     sstr = str(scalar).replace('**','^')
@@ -311,7 +316,7 @@ def mathematica_series(scalar, varlist, order):
                  ',' +varsstr+']'
                  ', InputForm]')
     simpstring = check_output([command,parameter])[0:-1].decode("utf-8")
-    return sympify(simpstring.replace('^', '**'))
+    return mathematica_parser(simpstring)
 
 def math_collect_terms(group):
     from collections import defaultdict
@@ -660,7 +665,7 @@ def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars
         #print(solstring)
         #print(check_output([command,parameter])[2:-3].decode("utf-8").split(', TBS, '))
         #ipdb.set_trace()
-        sols_list =  [sympify(sol.replace('^', '**'))
+        sols_list =  [mathematica_parser(sol)
                       for sol in solstring[:-1].split(',')]
     except Exception as e:
         print(str(e))
@@ -680,7 +685,7 @@ def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars
             else:
                 newfvar = next(fvargen)
                 newfvars.append(newfvar)
-            sols_list = [sol+newfvar*sympify(nullvecel)
+            sols_list = [sol+newfvar*mathematica_parser(nullvecel)
                          for sol, nullvecel in zip(sols_list, nullvec)]
    #ipdb.set_trace()
     if not sols_list:
