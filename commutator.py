@@ -826,7 +826,7 @@ def check_normalisable(psi, fvars, order, orders, split_orders, zero_not_needed 
     sparse_normalise(psi, order, orders, fvars, cvector, matrixrows, split_orders, subspace=subspace)
     for i, row in matrixrows.items():
         if not row:
-            if sympy.simplify(ncprod.scalar) != 0:
+            if sympy.simplify(cvector[i]) != 0:
                 if make_norm and subspace[i].product[0] != 1:
                     psi += [Ncproduct(subspace[i].scalar/2,[1]+subspace[i].product)]
                     split_orders[-1] += 1
