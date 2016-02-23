@@ -96,6 +96,9 @@ class Ncproduct:
         except:
             return False
 
+    def conjugate(self):
+        return Ncproduct(sympy.conjugate(self.scalar)*(2-len(self.product)%4), self.product)
+
     def __len__(self):
         return len(self.product)
 
@@ -347,22 +350,18 @@ def full_simplify_group(group):
 def multiply_groups(group_a, group_b):
     return simplify_group([a*b for a in group_a for b in group_b])
 
-def square_group_to_order(group, order, split_orders):
-    return simplify_group([(a*b)
-                           for i in range(order+1)
-                           for a in group[split_orders[i]:split_orders[i+1]]
-                           for b in group[split_orders[(order-i)]:split_orders[(order-i+1)]]
-                           ])
+def multiply_conjugate_groups(group_a, group_b):
+    return simplify_group([a.conjugate()*b for a in group_a for b in group_b])
 
 def square_group_to_order(group, order, split_orders):
-    return simplify_group([(a*b)
+    return simplify_group([(a.conjugate()*b)
                            for i in range(order+1)
                            for a in group[split_orders[i]:split_orders[i+1]]
                            for b in group[split_orders[(order-i)]:split_orders[(order-i+1)]]
                            ])
 
 def square_to_find_identity(group):
-    return simplify_group([a*a for a in collect_terms(group)])
+    return simplify_group([a.conjugate()*a for a in collect_terms(group)])
 
 def square_to_find_identity_scalar_up_to_order(group, order, split_orders):
     D = defaultdict(dict)
@@ -374,9 +373,8 @@ def square_to_find_identity_scalar_up_to_order(group, order, split_orders):
             for iorder, index in positions.items():
                 jorder = torder - iorder
                 if jorder in positions:
-                    result += (group[positions[iorder]].scalar
-                               *group[positions[jorder]].scalar
-                               *((2-(len(product)%4))))
+                    result += (sympy.conjugate(group[positions[iorder]].scalar)
+                               *group[positions[jorder]].scalar)
     return sympy.expand(result)
 
 def calculate_commutator(group_a,group_b):
