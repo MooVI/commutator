@@ -359,16 +359,19 @@ def multiply_conjugate_groups(group_a, group_b):
     return simplify_group([a.conjugate()*b for a in group_a for b in group_b])
 
 def square_group_to_order(group, order, split_orders):
-    return simplify_group([(a.conjugate()*b)
+    """Assumes Hermitian"""
+    return simplify_group([(a*b)
                            for i in range(order+1)
                            for a in group[split_orders[i]:split_orders[i+1]]
                            for b in group[split_orders[(order-i)]:split_orders[(order-i+1)]]
                            ])
 
 def square_to_find_identity(group):
-    return simplify_group([a.conjugate()*a for a in collect_terms(group)])
+    """Assumes Hermitian"""
+    return simplify_group([a*a for a in collect_terms(group)])
 
 def square_to_find_identity_scalar_up_to_order(group, order, split_orders):
+    """Assumes Hermitian"""
     D = defaultdict(dict)
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].update({bisect_right(split_orders,i)-1: i})
@@ -378,8 +381,8 @@ def square_to_find_identity_scalar_up_to_order(group, order, split_orders):
             for iorder, index in positions.items():
                 jorder = torder - iorder
                 if jorder in positions:
-                    result += (sympy.conjugate(group[positions[iorder]].scalar)
-                               *group[positions[jorder]].scalar)
+                    result += (group[positions[iorder]].scalar
+                               *(2-len(product)%4)*group[positions[jorder]].scalar)
     return sympy.expand(result)
 
 def calculate_commutator(group_a,group_b):
