@@ -1,6 +1,7 @@
 from sympy import symbols, I, pretty, sympify, Matrix, pi
 from sympy.solvers.solveset import linsolve, linear_eq_to_matrix
 from bisect import bisect_right
+import numpy as np
 import ipdb
 import json
 import yaml
@@ -11,19 +12,31 @@ from subprocess import check_output
 from sympy.parsing.mathematica import mathematica
 import tempfile
 import os
-
+from mathematica_printer import mstr
 
 command='/home/kempj/bin/MathematicaScript'
+qcommand = '/home/kempj/bin/runMath'
 
 def multiple_replace(string, rep_dict):
     pattern = re.compile("|".join([re.escape(k) for k in rep_dict.keys()]), re.M)
     return pattern.sub(lambda x: rep_dict[x.group(0)], string)
 
+def mathematica_parser(exprstring):
+    return sympify(multiple_replace(exprstring, {'^': '**',
+                                                 'E^': 'exp',
+                                                 'Sqrt': 'sqrt',
+                                                 '[':'(',
+                                                 ']':')'}),
+                   mathematica_parser.vardict)
+
+mathematica_parser.vardict = {}
+
 class Ncproduct:
-    def set_n(self, n):
+    def set_n(n):
+        n = sympify(n)
         Ncproduct.n = n
-        Ncproduct.w = sympy.exp(2*I*pi/n)
-        Ncproduct.wr = sympy.exp(-2*I*pi/n)
+        Ncproduct.w = sympy.RootOfUnity(n)
+        Ncproduct.wr = sympy.conjugate(sympy.RootOfUnity(n))
 
     def __init__(self, scalar, product):
         self.scalar = scalar
@@ -131,15 +144,18 @@ class Ncproduct:
 
     def destringify(self, string):
         result = []
-        string = string.replace('\u22c5', ' ')
-        for op in string.split(' '):
-            if op[0] == 'a':
-                result.append(int(op[1:])*2-1)
-            elif op[0] == 'b':
-                result.append(int(op[1:])*2)
-            else:
-                print('Unknown operator ' + op)
-        return result
+        if len(string) > 0:
+            string = string.replace('\u22c5', ' ')
+            for op in string.split(' '):
+                if op[0] == 'a':
+                    result.append(int(op[1:])*2-1)
+                elif op[0] == 'b':
+                    result.append(int(op[1:])*2)
+                else:
+                    print('Unknown operator ' + op)
+                return result
+        else:
+            return []
 
     def texify(self):
         tex = sympy.latex(self.scalar)
@@ -304,23 +320,27 @@ def full_collect_terms(group):
 
 
 def mathematica_simplify(scalar):
-    sstr = str(scalar).replace('**','^')
+    sstr = mstr(scalar)
     parameter = ('ToString['
                  'Simplify[' + sstr +']'
                  ', InputForm]')
-    simpstring = check_output([command,parameter])[0:-1].decode("utf-8")
-    return sympify(simpstring.replace('^', '**'))
+    simpstring = check_output([qcommand,parameter])[0:-1].decode("utf-8")
+    try:
+        return mathematica_parser(simpstring)
+    except Exception as e:
+        print(str(e))
+        print(simpstring)
 
 def mathematica_series(scalar, varlist, order):
-    sstr = str(scalar).replace('**','^')
+    sstr = mstr(scalar)
     varsstr = ','.join(['{'+str(var) +', 0, ' + str(order) +'}' for var in varlist])
     parameter = ('ToString[' +
                  'Series['+
                  sstr+
                  ',' +varsstr+']'
                  ', InputForm]')
-    simpstring = check_output([command,parameter])[0:-1].decode("utf-8")
-    return sympify(simpstring.replace('^', '**'))
+    simpstring = check_output([qcommand,parameter])[0:-1].decode("utf-8")
+    return mathematica_parser(simpstring)
 
 def math_collect_terms(group):
     from collections import defaultdict
@@ -439,12 +459,15 @@ def check_group_at_least_order(group, order, orders):
                 return False
     return True
 
-def print_group(group, breaks = True):
+def print_group(group, breaks = True, neglect_order = None):
     if not hasattr(print_group, 'orders'):
         print_group.orders = {}
     if isinstance(group, list):
         if len(group) > 1:
             group = order_group(group, print_group.orders)
+            if neglect_order is not None:
+                for ncprod in group:
+                    ncprod.scalar  = neglect_to_order(ncprod.scalar, neglect_order, print_group.orders)
             if breaks:
                 print('{'+ ('+'+'\n+'.join(str(a) for a in group)).replace('+-', '\u2212')+'}')
             if not breaks:
@@ -650,9 +673,9 @@ def find_sub_subspaces(matrixrows):
 
 def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars):
     #return sympy.solve_linear_system(augmatrix,*fvars)
-    mstr = multiple_replace(str(augmatrix)[7:-1],{ '[':'{',']':'}', '**':'^'})
+    augstr = mstr(augmatrix)
     script = ('Print['
-                 'M = ' + mstr + ';'
+                 'M = ' + augstr + ';'
                  'ToString['
                  '{'
                  'Simplify[LinearSolve[M[[1 ;; -1, 1 ;; -2]], M[[All, -1]]]], TBS,'
@@ -670,7 +693,7 @@ def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars
         #print(solstring)
         #print(check_output([command,parameter])[2:-3].decode("utf-8").split(', TBS, '))
         #ipdb.set_trace()
-        sols_list =  [sympify(sol.replace('^', '**'))
+        sols_list =  [mathematica_parser(sol)
                       for sol in solstring[:-1].split(',')]
     except Exception as e:
         print(str(e))
@@ -690,7 +713,7 @@ def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars
             else:
                 newfvar = next(fvargen)
                 newfvars.append(newfvar)
-            sols_list = [sol+newfvar*sympify(nullvecel)
+            sols_list = [sol+newfvar*mathematica_parser(nullvecel)
                          for sol, nullvecel in zip(sols_list, nullvec)]
    #ipdb.set_trace()
     if not sols_list:
