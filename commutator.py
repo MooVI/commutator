@@ -11,8 +11,10 @@ from subprocess import check_output
 from sympy.parsing.mathematica import mathematica
 import tempfile
 import os
+from mathematica_printer import mstr
 
 command='/home/kempj/bin/MathematicaScript'
+qcommand = '/home/kempj/bin/runMath'
 
 def multiple_replace(string, rep_dict):
     pattern = re.compile("|".join([re.escape(k) for k in rep_dict.keys()]), re.M)
@@ -125,15 +127,18 @@ class Ncproduct:
 
     def destringify(self, string):
         result = []
-        string = string.replace('\u22c5', ' ')
-        for op in string.split(' '):
-            if op[0] == 'a':
-                result.append(int(op[1:])*2-1)
-            elif op[0] == 'b':
-                result.append(int(op[1:])*2)
-            else:
-                print('Unknown operator ' + op)
-        return result
+        if len(string) > 0:
+            string = string.replace('\u22c5', ' ')
+            for op in string.split(' '):
+                if op[0] == 'a':
+                    result.append(int(op[1:])*2-1)
+                elif op[0] == 'b':
+                    result.append(int(op[1:])*2)
+                else:
+                    print('Unknown operator ' + op)
+                return result
+        else:
+            return []
 
     def texify(self):
         tex = sympy.latex(self.scalar)
@@ -198,6 +203,9 @@ def commute_group(group_a, group_b):
 
 def remove_zeros(group):
     group[:] = (a for a in group if a.scalar != 0)
+
+def conjugate_group(group):
+    return [a.conjugate() for a in group]
 
 
 def sort_pauli_product(ncprod):
@@ -300,22 +308,26 @@ def full_collect_terms(group):
 
 
 def mathematica_simplify(scalar):
-    sstr = str(scalar).replace('**','^')
+    sstr = mstr(scalar)
     parameter = ('ToString['
                  'Simplify[' + sstr +']'
                  ', InputForm]')
-    simpstring = check_output([command,parameter])[0:-1].decode("utf-8")
-    return mathematica_parser(simpstring)
+    simpstring = check_output([qcommand,parameter])[0:-1].decode("utf-8")
+    try:
+        return mathematica_parser(simpstring)
+    except Exception as e:
+        print(str(e))
+        print(simpstring)
 
 def mathematica_series(scalar, varlist, order):
-    sstr = str(scalar).replace('**','^')
+    sstr = mstr(scalar)
     varsstr = ','.join(['{'+str(var) +', 0, ' + str(order) +'}' for var in varlist])
     parameter = ('ToString[' +
                  'Series['+
                  sstr+
                  ',' +varsstr+']'
                  ', InputForm]')
-    simpstring = check_output([command,parameter])[0:-1].decode("utf-8")
+    simpstring = check_output([qcommand,parameter])[0:-1].decode("utf-8")
     return mathematica_parser(simpstring)
 
 def math_collect_terms(group):
@@ -359,16 +371,19 @@ def multiply_conjugate_groups(group_a, group_b):
     return simplify_group([a.conjugate()*b for a in group_a for b in group_b])
 
 def square_group_to_order(group, order, split_orders):
-    return simplify_group([(a.conjugate()*b)
+    """Assumes Hermitian"""
+    return simplify_group([(a*b)
                            for i in range(order+1)
                            for a in group[split_orders[i]:split_orders[i+1]]
                            for b in group[split_orders[(order-i)]:split_orders[(order-i+1)]]
                            ])
 
 def square_to_find_identity(group):
-    return simplify_group([a.conjugate()*a for a in collect_terms(group)])
+    """Assumes Hermitian"""
+    return simplify_group([a*a for a in collect_terms(group)])
 
 def square_to_find_identity_scalar_up_to_order(group, order, split_orders):
+    """Assumes Hermitian"""
     D = defaultdict(dict)
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].update({bisect_right(split_orders,i)-1: i})
@@ -378,8 +393,8 @@ def square_to_find_identity_scalar_up_to_order(group, order, split_orders):
             for iorder, index in positions.items():
                 jorder = torder - iorder
                 if jorder in positions:
-                    result += (sympy.conjugate(group[positions[iorder]].scalar)
-                               *group[positions[jorder]].scalar)
+                    result += (group[positions[iorder]].scalar
+                               *(2-len(product)%4)*group[positions[jorder]].scalar)
     return sympy.expand(result)
 
 def calculate_commutator(group_a,group_b):
@@ -434,12 +449,15 @@ def check_group_at_least_order(group, order, orders):
                 return False
     return True
 
-def print_group(group, breaks = True):
+def print_group(group, breaks = True, neglect_order = None):
     if not hasattr(print_group, 'orders'):
         print_group.orders = {}
     if isinstance(group, list):
         if len(group) > 1:
             group = order_group(group, print_group.orders)
+            if neglect_order is not None:
+                for ncprod in group:
+                    ncprod.scalar  = neglect_to_order(ncprod.scalar, neglect_order, print_group.orders)
             if breaks:
                 print('{'+ ('+'+'\n+'.join(str(a) for a in group)).replace('+-', '\u2212')+'}')
             if not breaks:
@@ -645,9 +663,9 @@ def find_sub_subspaces(matrixrows):
 
 def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars):
     #return sympy.solve_linear_system(augmatrix,*fvars)
-    mstr = multiple_replace(str(augmatrix)[7:-1],{ '[':'{',']':'}', '**':'^'})
+    augstr = mstr(augmatrix)
     script = ('Print['
-                 'M = ' + mstr + ';'
+                 'M = ' + augstr + ';'
                  'ToString['
                  '{'
                  'Simplify[LinearSolve[M[[1 ;; -1, 1 ;; -2]], M[[All, -1]]]], TBS,'
@@ -829,7 +847,7 @@ def check_normalisable(psi, fvars, order, orders, split_orders, zero_not_needed 
     sparse_normalise(psi, order, orders, fvars, cvector, matrixrows, split_orders, subspace=subspace)
     for i, row in matrixrows.items():
         if not row:
-            if sympy.simplify(ncprod.scalar) != 0:
+            if sympy.simplify(cvector[i]) != 0:
                 if make_norm and subspace[i].product[0] != 1:
                     psi += [Ncproduct(subspace[i].scalar/2,[1]+subspace[i].product)]
                     split_orders[-1] += 1
