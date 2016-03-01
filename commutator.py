@@ -11,8 +11,10 @@ from subprocess import check_output
 from sympy.parsing.mathematica import mathematica
 import tempfile
 import os
+from mathematica_printer import mstr
 
 command='/home/kempj/bin/MathematicaScript'
+qcommand = '/home/kempj/bin/runMath'
 
 def multiple_replace(string, rep_dict):
     pattern = re.compile("|".join([re.escape(k) for k in rep_dict.keys()]), re.M)
@@ -300,22 +302,26 @@ def full_collect_terms(group):
 
 
 def mathematica_simplify(scalar):
-    sstr = str(scalar).replace('**','^')
+    sstr = mstr(scalar)
     parameter = ('ToString['
                  'Simplify[' + sstr +']'
                  ', InputForm]')
-    simpstring = check_output([command,parameter])[0:-1].decode("utf-8")
-    return mathematica_parser(simpstring)
+    simpstring = check_output([qcommand,parameter])[0:-1].decode("utf-8")
+    try:
+        return mathematica_parser(simpstring)
+    except Exception as e:
+        print(str(e))
+        print(simpstring)
 
 def mathematica_series(scalar, varlist, order):
-    sstr = str(scalar).replace('**','^')
+    sstr = mstr(scalar)
     varsstr = ','.join(['{'+str(var) +', 0, ' + str(order) +'}' for var in varlist])
     parameter = ('ToString[' +
                  'Series['+
                  sstr+
                  ',' +varsstr+']'
                  ', InputForm]')
-    simpstring = check_output([command,parameter])[0:-1].decode("utf-8")
+    simpstring = check_output([qcommand,parameter])[0:-1].decode("utf-8")
     return mathematica_parser(simpstring)
 
 def math_collect_terms(group):
@@ -648,9 +654,9 @@ def find_sub_subspaces(matrixrows):
 
 def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars):
     #return sympy.solve_linear_system(augmatrix,*fvars)
-    mstr = multiple_replace(str(augmatrix)[7:-1],{ '[':'{',']':'}', '**':'^'})
+    augstr = mstr(augmatrix)
     script = ('Print['
-                 'M = ' + mstr + ';'
+                 'M = ' + augstr + ';'
                  'ToString['
                  '{'
                  'Simplify[LinearSolve[M[[1 ;; -1, 1 ;; -2]], M[[All, -1]]]], TBS,'
