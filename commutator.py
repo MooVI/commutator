@@ -204,6 +204,9 @@ def commute_group(group_a, group_b):
 def remove_zeros(group):
     group[:] = (a for a in group if a.scalar != 0)
 
+def conjugate_group(group):
+    return [a.conjugate() for a in group]
+
 
 def sort_pauli_product(ncprod):
     i = 0
