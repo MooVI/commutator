@@ -127,15 +127,18 @@ class Ncproduct:
 
     def destringify(self, string):
         result = []
-        string = string.replace('\u22c5', ' ')
-        for op in string.split(' '):
-            if op[0] == 'a':
-                result.append(int(op[1:])*2-1)
-            elif op[0] == 'b':
-                result.append(int(op[1:])*2)
-            else:
-                print('Unknown operator ' + op)
-        return result
+        if len(string) > 0:
+            string = string.replace('\u22c5', ' ')
+            for op in string.split(' '):
+                if op[0] == 'a':
+                    result.append(int(op[1:])*2-1)
+                elif op[0] == 'b':
+                    result.append(int(op[1:])*2)
+                else:
+                    print('Unknown operator ' + op)
+                return result
+        else:
+            return []
 
     def texify(self):
         tex = sympy.latex(self.scalar)
