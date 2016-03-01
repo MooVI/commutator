@@ -449,12 +449,15 @@ def check_group_at_least_order(group, order, orders):
                 return False
     return True
 
-def print_group(group, breaks = True):
+def print_group(group, breaks = True, neglect_order = None):
     if not hasattr(print_group, 'orders'):
         print_group.orders = {}
     if isinstance(group, list):
         if len(group) > 1:
             group = order_group(group, print_group.orders)
+            if neglect_order is not None:
+                for ncprod in group:
+                    ncprod.scalar  = neglect_to_order(ncprod.scalar, neglect_order, print_group.orders)
             if breaks:
                 print('{'+ ('+'+'\n+'.join(str(a) for a in group)).replace('+-', '\u2212')+'}')
             if not breaks:
