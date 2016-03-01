@@ -106,12 +106,14 @@ class Ncproduct:
             return Ncproduct(self.scalar*other, self.product)
 
     def conjugate(self):
+        """Assumes in sorted order"""
         counter= Counter(self.product)
         product = [val for subl in
-            [([key]*(value*(ncprod.n-1) % ncprod.n)) for key, value in counter.items()]
+            [([key]*(value*(self.n-1) % self.n)) for key, value in counter.items()]
             for val in subl]
-        ncomm = np.sum(np.cumprod(np.array(list(Counter(product).values()))))
-        return Ncproduct(sympy.conjugate(self.scalar)*wr**(ncomm), product)
+        groupings = np.array(list(Counter(product).values()))
+        ncomm = int(np.sum(np.multiply(groupings[1:], np.cumsum(groupings)[:-1])))
+        return Ncproduct(sympy.conjugate(self.scalar)*self.wr**(ncomm), product)
 
     def __repr__(self):
         return str(self.scalar) + ' : ' +str(self.product)
@@ -208,7 +210,7 @@ def commute(a,b):
     elif a == b:
         return [0*a*b]
     else:
-        return [(1-a.wr)*a*b]
+        return [(1-a.wr)*a*b] if a.product[0] < b.product[0] else [(1-a.w)*a*b]
 
 def commute_group(group_a, group_b):
     result = []
@@ -220,6 +222,9 @@ def commute_group(group_a, group_b):
 
 def remove_zeros(group):
     group[:] = (a for a in group if a.scalar != 0)
+
+def conjugate_group(group):
+    return [a.conjugate() for a in group]
 
 
 def sort_pauli_product(ncprod):
@@ -857,7 +862,7 @@ def check_normalisable(psi, fvars, order, orders, split_orders, zero_not_needed 
     sparse_normalise(psi, order, orders, fvars, cvector, matrixrows, split_orders, subspace=subspace)
     for i, row in matrixrows.items():
         if not row:
-            if sympy.simplify(ncprod.scalar) != 0:
+            if sympy.simplify(cvector[i]) != 0:
                 if make_norm and subspace[i].product[0] != 1:
                     psi += [Ncproduct(subspace[i].scalar/2,[1]+subspace[i].product)]
                     split_orders[-1] += 1
