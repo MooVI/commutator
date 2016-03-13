@@ -85,8 +85,8 @@ class MathematicaStrPrinter(StrPrinter):
     def _print_Pow(self, expr, rational=False):
         PREC = precedence(expr)
 
-        if expr.base is RootOfUnity:
-            return 'Exp['+str(2*expr.base.n)+ 'I Pi /'+ str(expr.base.n) + ']'
+        #if expr.base is RootOfUnity:
+        #    return 'Exp['+str(2*expr.base.n)+ 'I Pi /'+ str(expr.base.n) + ']'
 
         if expr.exp is S.Half and not rational:
             return "sqrt(%s)" % self._print(expr.base)
@@ -114,7 +114,8 @@ class MathematicaStrPrinter(StrPrinter):
                          self.parenthesize(expr.exp, PREC))
 
     def _print_RootOfUnity(self, expr):
-        return 'Exp[2 I Pi /'+ str(expr.n) + ']'
+        #return 'Exp[2 I Pi /'+ str(expr.n) + ']'
+        return 'w'
 
     def _print_list(self, expr):
         return "{%s}" % self.stringify(expr, ", ")
