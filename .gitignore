@@ -18,3 +18,7 @@ _*
 *_norm
 *.mml
 *.el
+*.m
+*log2
+*.psi
+*.nfs
