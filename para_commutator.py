@@ -31,6 +31,12 @@ def mathematica_parser(exprstring):
 
 mathematica_parser.vardict = {}
 
+
+def para_simplify(x):
+    return sympy.simplify(x.rewrite(sympy.exp))
+
+default_simplify = para_simplify
+
 class Ncproduct:
     def set_n(n):
         n = sympify(n)
@@ -321,7 +327,7 @@ def full_collect_terms(group):
     D = defaultdict(list)
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].append(i)
-    return [Ncproduct(sympy.simplify(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
+    return [Ncproduct(default_simplify(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
 
 
 def mathematica_simplify(scalar):
@@ -369,6 +375,22 @@ def simplify_group(group):
         sort_anticommuting_product(ncprod)
         set_squares_to_identity(ncprod)
     group = collect_terms(group)
+    remove_zeros(group)
+    return group
+
+def generic_collect_terms(group, simplify_func):
+    from collections import defaultdict
+    D = defaultdict(list)
+    for i,ncprod in enumerate(group):
+        D[tuple(ncprod.product)].append(i)
+    return [Ncproduct(simplify_func(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
+
+def generic_simplify_group(group, simplify_func):
+    remove_zeros(group)
+    for ncprod in group:
+        sort_anticommuting_product(ncprod)
+        set_squares_to_identity(ncprod)
+    group = generic_collect_terms(group, simplify_func)
     remove_zeros(group)
     return group
 
@@ -458,7 +480,7 @@ def order_group(group, orders):
 def check_group_at_least_order(group, order, orders):
     for ncprod in group:
         if find_order(ncprod.scalar, orders) <= order:
-            test = sympy.simplify(ncprod.scalar)
+            test = default_simplify(ncprod.scalar)
             if test != 0 and find_order(test, orders) <= order:
                 print('Error: ' + str(test) + ': ' + str(ncprod.product))
                 return False
@@ -677,7 +699,12 @@ def find_sub_subspaces(matrixrows):
 
 
 def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars):
-    #return sympy.solve_linear_system(augmatrix,*fvars)
+    # sols_set = linsolve(augmatrix, *fvars)
+    # if not sols_set:
+    #     return {}, False
+    # sols = dict(zip(fvars, list(sols_set)[0]))
+    # return {var: default_simplify(sol) for var, sol in sols.items() if var is not sol}, True
+    # #return sympy.solve_linear_system(augmatrix,*fvars)
     augstr = mstr(augmatrix)
     script = ('Print['
                  'M = ' + augstr + ';'
@@ -771,7 +798,7 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space,
         if oldfvar in sols:
             subs_rules.update({var: rule.xreplace({oldfvar: sols[oldfvar]})
                           for var, rule in subs_rules.items()})
-            subs_rules[oldfvar] = sympy.simplify(sols[oldfvar])
+            subs_rules[oldfvar] = default_simplify(sols[oldfvar])
     return sols
 
 
@@ -852,7 +879,7 @@ def check_normalisable(psi, fvars, order, orders, split_orders, zero_not_needed 
         norm = square_group_to_order(psi, order, split_orders)
         to_cancel = [ncprod for ncprod in norm if ncprod.product]
         for ncprod in to_cancel:
-            if sympy.simplify(ncprod.scalar) != 0:
+            if default_simplify(ncprod.scalar) != 0:
                 if make_norm and ncprod.product[0] != 1:
                     psi += [Ncproduct(-ncprod.scalar/2,[1]+ncprod.product)]
                     split_orders[-1] += 1
@@ -862,7 +889,7 @@ def check_normalisable(psi, fvars, order, orders, split_orders, zero_not_needed 
     sparse_normalise(psi, order, orders, fvars, cvector, matrixrows, split_orders, subspace=subspace)
     for i, row in matrixrows.items():
         if not row:
-            if sympy.simplify(cvector[i]) != 0:
+            if default_simplify(cvector[i]) != 0:
                 if make_norm and subspace[i].product[0] != 1:
                     psi += [Ncproduct(subspace[i].scalar/2,[1]+subspace[i].product)]
                     split_orders[-1] += 1
@@ -906,7 +933,7 @@ def check_truncate(to_cancel, fvars):
     truncate_fill(to_cancel, fvars, matrixrows, cvector)
     for i, row in matrixrows.items():
         if not row:
-            if sympy.simplify(cvector[i]) != 0:
+            if default_simplify(cvector[i]) != 0:
                 return False
     sub_sub_spaces = find_sub_subspaces(matrixrows)
     length_ss = len(sub_sub_spaces)
@@ -993,3 +1020,12 @@ def fill_subspace_norm(Jpart, to_cancel, order):
     L = 2*order+1
     subspace_ops = build_odd_norm_subspace(L)
     return sparse_find_subspace(to_cancel+subspace_ops, Jpart)
+
+class ParaSimp:
+    def get_simp(self, order, orders):
+        self.order = order
+        self.orders = orders
+        return self
+
+    def __call__(self, x):
+        return sympy.simplify(neglect_to_order(x,self.order,self.orders).rewrite(exp))
