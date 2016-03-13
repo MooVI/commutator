@@ -1,4 +1,4 @@
-from sympy import symbols, I, pretty, sympify, Matrix
+from sympy import symbols, I, pretty, sympify, Matrix, S
 from sympy.solvers.solveset import linsolve, linear_eq_to_matrix
 from bisect import bisect_right
 import ipdb
@@ -136,7 +136,7 @@ class Ncproduct:
                     result.append(int(op[1:])*2)
                 else:
                     print('Unknown operator ' + op)
-                return result
+            return result
         else:
             return []
 
@@ -285,10 +285,10 @@ def convert_from_sigma(sigma):
 def convert_group(group):
     if not isinstance(group, list):
         group = [group]
-    if isinstance(group[0], Ncproduct):
-        return [convert_to_sigma(el) for el in group]
-    elif isinstance(group[0], SigmaProduct):
+    if isinstance(group[0], SigmaProduct):
         return [convert_from_sigma(el) for el in group]
+    elif isinstance(group[0], Ncproduct):
+        return [convert_to_sigma(el) for el in group]
     else:
         raise ValueError('Unrecognised conversion asked for!')
 
@@ -432,7 +432,7 @@ def find_order(expr, orders):
 def neglect_to_order(expr, order, orders):
     expr = sympy.expand(expr)
     if find_order(expr, orders) > order:
-        return 0
+        return S.Zero
     if expr.func == sympy.Add:
         expr = sympy.Add(*[neglect_to_order(term, order, orders) for term in expr.args])
     return expr
