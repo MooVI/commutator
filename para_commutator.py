@@ -1,4 +1,4 @@
-from sympy import symbols, I, pretty, sympify, Matrix, pi
+from sympy import symbols, I, pretty, sympify, Matrix, pi, S
 from sympy.solvers.solveset import linsolve, linear_eq_to_matrix
 from bisect import bisect_right
 import numpy as np
@@ -469,7 +469,7 @@ def find_order(expr, orders):
 def neglect_to_order(expr, order, orders):
     expr = sympy.expand(expr)
     if find_order(expr, orders) > order:
-        return 0
+        return S.Zero
     if expr.func == sympy.Add:
         expr = sympy.Add(*[neglect_to_order(term, order, orders) for term in expr.args])
     return expr
