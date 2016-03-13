@@ -749,9 +749,13 @@ def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars
                          for sol, nullvecel in zip(sols_list, nullvec)]
    #ipdb.set_trace()
     if not sols_list:
-        return {}
+        return {}, False
     sols = dict(zip(fvars, sols_list))
-    return {var: sol for var, sol in sols.items() if var is not sol}
+    
+    return {var: sol for var, sol in sols.items() if var is not sol}, True
+   
+
+    
 
 def solve_for_sub_subspace(matrixrows, sub_sub_space,
                            coeffs, cvector,
@@ -786,8 +790,8 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space,
                     coeff_val = -sympy.expand(augmatrix[row_ind,-1]).coeff(iofvar)
                     augmatrix[row_ind,-2] = coeff_val
                     augmatrix[row_ind,-1] += coeff_val*iofvar
-    sols = linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len(oldfvars))
-    if not sols:
+    sols, success = linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len(oldfvars))
+    if not success:
         print(repr(augmatrix))
         print(fvars)
         print(rownumstore)
