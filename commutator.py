@@ -12,6 +12,7 @@ from sympy.parsing.mathematica import mathematica
 import tempfile
 import os
 from mathematica_printer import mstr
+import shutil
 
 command='/home/kempj/bin/MathematicaScript'
 qcommand = '/home/kempj/bin/runMath'
@@ -661,17 +662,23 @@ def find_sub_subspaces(matrixrows):
     return [list(space) for space in merge([[el[0] for el in row] for rownum, row in matrixrows.items()])]
 
 
-def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars):
+def linear_solve(sparse_mat_rep, sub_cvector, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars):
     #return sympy.solve_linear_system(augmatrix,*fvars)
-    augstr = mstr(augmatrix)
+    sparse_str = ('SparseArray[{'
+                  + ','.join(['{'+str(ind[0]+1)+','+str(ind[1]+1)+'}' for ind in sparse_mat_rep])
+                  + '}->{'
+                  + ','.join([mstr(value) for ind, value in sparse_mat_rep.items()])
+                  + '}]')
+    cvector_str = '{'+','.join([mstr(val) for val in sub_cvector]) + '}'
     script = ('Print['
-                 'M = ' + augstr + ';'
-                 'ToString['
-                 '{'
-                 'Simplify[LinearSolve[M[[1 ;; -1, 1 ;; -2]], M[[All, -1]]]], TBS,'
-                 'NullSpace[M[[1 ;; -1, 1 ;; -2]]]'
-                 '}'
-                 ', InputForm] ];')
+              'M = ' + sparse_str + ';'
+              'b = SparseArray[' + cvector_str + '];'
+              'ToString['
+              '{'
+              'Simplify[LinearSolver[M, b]], TBS,'
+              'NullSpace[M]'
+              '}'
+              ', InputForm] ];')
     script_file = tempfile.NamedTemporaryFile(mode = 'wt', delete=False)
     checkstring = "Not set."
     try:
@@ -686,6 +693,7 @@ def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars
         sols_list =  [mathematica_parser(sol)
                       for sol in solstring[:-1].split(',')]
     except Exception as e:
+        shutil.copy(script_file.name, './failed_script.m')
         print(str(e))
         print(checkstring)
         return {}
@@ -717,18 +725,21 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space,
                            fvargen, newfvars, tempgen, tempvars):
     sspacedict = dict(zip(sub_sub_space, range(len(sub_sub_space))))
     length = len(sub_sub_space)
-    augmatrixrows = []
+    sparse_mat_rep = OrderedDict()
+    sub_cvector = []
     rownumstore = [] #for debugging
+    row_count = 0
     for rownum, row in matrixrows.items():
         if row and row[0][0] in sub_sub_space:
-            augmatrixrows.append(length*[0]+[cvector[rownum]])
             rownumstore.append(rownum)
+            sub_cvector.append(cvector[rownum])
             for el in row:
-                augmatrixrows[-1][sspacedict[el[0]]] = el[1]
+                sparse_mat_rep[(row_count, sspacedict[el[0]])] = el[1]
+            row_count += 1
     fvars = [coeffs[ind] for ind in sub_sub_space]
-    augmatrix = Matrix(augmatrixrows)
     oldfvars = []
     if iofvars:
+        raise ValueError("iofvars not empty not supported for sparse matrices")
         #ipdb.set_trace()
         atoms = augmatrix.atoms(sympy.Symbol)
         for iofvar in subs_rules:
@@ -744,9 +755,9 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space,
                     coeff_val = -sympy.expand(augmatrix[row_ind,-1]).coeff(iofvar)
                     augmatrix[row_ind,-2] = coeff_val
                     augmatrix[row_ind,-1] += coeff_val*iofvar
-    sols = linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len(oldfvars))
+    sols = linear_solve(sparse_mat_rep, sub_cvector, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len(oldfvars))
     if not sols:
-        print(repr(augmatrix))
+        print(sparse_mat_rep)
         print(fvars)
         print(rownumstore)
         print(iofvars)

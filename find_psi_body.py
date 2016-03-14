@@ -14,6 +14,7 @@ for test_order in range(START_ORDER, END_ORDER+1):
     cvector = comm.build_vector_to_cancel(comm.substitute_group(Hcomm, normdict), subspace)
     psi = comm.substitute_group(psi, normdict, split_orders = split_orders)
     subs_rules = {}
+    iofvars = []
     psi_test = comm.sparse_solve_for_commuting_term(cvector,
                                                     psi,
                                                     test_order,
