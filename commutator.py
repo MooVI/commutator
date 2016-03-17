@@ -12,7 +12,12 @@ from sympy.parsing.mathematica import mathematica
 import tempfile
 import os
 from mathematica_printer import mstr
+from matlab_printer import matlabstr
 import shutil
+import matlab.engine
+
+
+eng = matlab.engine.start_matlab()
 
 command='/home/kempj/bin/MathematicaScript'
 qcommand = '/home/kempj/bin/runMath'
@@ -664,55 +669,62 @@ def find_sub_subspaces(matrixrows):
 
 def linear_solve(sparse_mat_rep, sub_cvector, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars):
     #return sympy.solve_linear_system(augmatrix,*fvars)
-    sparse_str = ('SparseArray[{'
-                  + ','.join(['{'+str(ind[0]+1)+','+str(ind[1]+1)+'}' for ind in sparse_mat_rep])
-                  + '}->{'
-                  + ','.join([mstr(value) for ind, value in sparse_mat_rep.items()])
-                  + '}]')
-    cvector_str = '{'+','.join([mstr(val) for val in sub_cvector]) + '}'
-    script = ('Print['
-              'M = ' + sparse_str + ';'
-              'b = SparseArray[' + cvector_str + '];'
-              'ToString['
-              '{'
-              'Simplify[LinearSolver[M, b]], TBS,'
-              'NullSpace[M]'
-              '}'
-              ', InputForm] ];')
-    script_file = tempfile.NamedTemporaryFile(mode = 'wt', delete=False)
+    x_str = '[' + ' '.join(str(ind[0]+1) for ind in sparse_mat_rep)+']'
+    y_str = '[' + ' '.join(str(ind[1]+1) for ind in sparse_mat_rep)+']'
+    val_str = matlabstr([value for ind, value in sparse_mat_rep.items()])
+    b_str = matlabstr(sub_cvector)+"'"
+    var_str = ';'.join(name+"=sym('"+name+ "', 'real')"
+                       for name in mathematica_parser.vardict)+';\n'
+    script = ('function ret = linearsolve()\n'+
+              var_str+
+              'x = ' + x_str + ';\n'
+              'y = ' + y_str + ';\n'
+              'val = ' + val_str + ';\n'
+              'M = sparse(x, y, val);\n'
+              'b = ' + b_str + ';\n'
+              'Z = null(full(M));\n'
+              "Zstr = '';\n"
+              'for col= 1:size(Z,2)\n'
+              "Zstr = strcat(Zstr,';', char(Z(:,col)));\n"
+              'end\n'
+              "ret = strcat(char(linsolve(M, b)),'TBS', Zstr);")
+    script_file = tempfile.NamedTemporaryFile(mode = 'wt',
+                                              delete=False,
+                                              dir = './',
+                                              suffix=".m")
     checkstring = "Not set."
     try:
         script_file.write(script)
         script_file.close()
         del script
-        checkstring = check_output([command, '-script', script_file.name])[2:-3].decode("utf-8").split(', TBS, ')
+        checkstring = getattr(eng, script_file.name.split('/')[-1][:-2])().split('TBS')
         solstring, nullstring = checkstring
         #print(solstring)
         #print(check_output([command,parameter])[2:-3].decode("utf-8").split(', TBS, '))
         #ipdb.set_trace()
-        sols_list =  [mathematica_parser(sol)
-                      for sol in solstring[:-1].split(',')]
+        sols_list = sympify('Matri'+checkstring[5:].replace('^','**').replace('i', '*I'))
     except Exception as e:
-        shutil.copy(script_file.name, './failed_script.m')
+        shutil.copy(script_file.name, './failed_matlab_script.m')
         print(str(e))
         print(checkstring)
         return {}
     finally:
         os.remove(script_file.name)
     if len(nullstring) > 2:
-        sepvecs = nullstring[1:-1].split('}, ')
+        sepvecs = [sympify('Matri'+ nullvecstr.replace('^','**').replace('i', '*I'))
+                           for nullvecstr in nullstring.split(';matri')[1:]]
         for nullvec in sepvecs:
-            nullvec = nullvec[1:].split(',')
-            if any(nullvecel != 0
-                   for nullvecel in nullvec[len(nullvec)-len_oldfvars:]):
+            if len_oldfvars > 0:
+                raise ValueError("Non empy iofvars not supported in Matlab!")
                 newfvar = next(tempgen)
                 iofvars.append(newfvar)
                 tempvars.append(newfvar)
             else:
                 newfvar = next(fvargen)
                 newfvars.append(newfvar)
-            sols_list = [sol+newfvar*mathematica_parser(nullvecel)
+            sols_list = [sol+newfvar*nullvecel
                          for sol, nullvecel in zip(sols_list, nullvec)]
+
    #ipdb.set_trace()
     if not sols_list:
         return {}

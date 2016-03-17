@@ -17,20 +17,20 @@ small = fpart+V2part
 Jpart = [Ncproduct(I, [2*j+2,2*j+3]) for j in range(L-1)]
 H = small +Jpart
 
-START_ORDER = 8
-END_ORDER = 10
+START_ORDER = 1
+END_ORDER = 12
 
 START_PSI = [N(1, 'a1')]
 
 START_IOFVARS = []
-START_SPLIT_ORDERS = []
+START_SPLIT_ORDERS = [0, 1]
 START_NORMDICT = {}
 
-START_PSI = comm.load_group('psi_j2_r8', START_IOFVARS, START_SPLIT_ORDERS, START_NORMDICT)
+#START_PSI = comm.load_group('psi_j2_r8', START_IOFVARS, START_SPLIT_ORDERS, START_NORMDICT)
 
 orders.update(zip(START_IOFVARS,[START_ORDER-1]*len(START_IOFVARS)))
 
-FILEHEAD = 'psi_j2_test'
+FILEHEAD = 'psi_j2_matlab'
 NORM_AS_YOU_GO = True
 
 # START_NORMDICT = comm.check_normalisable(START_PSI,
