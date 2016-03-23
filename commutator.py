@@ -213,6 +213,27 @@ def commute_group(group_a, group_b):
                 result += commute(a,b)
     return result
 
+
+def commute_with_perturbing_H(Hpert, group, split_orders):
+    result = []
+    for a in Hpert:
+        for b in group[split_orders[-2]:split_orders[-1]]:
+            if not (a.is_identity() or b.is_identity()):
+                result += commute(a,b)
+    return result
+
+def commute_up_to_order(group_a, group_b, order, split_orders_a, split_orders_b):
+    result = []
+    a_order_max = len(split_orders_a)-1
+    b_order_max = len(split_orders_b)-1
+    if a_order_max + b_order_max <= order:
+        return commute_group(group_a, group_b)
+    for aorder in range(a_order_max):
+        for border in range(min([order-aorder, b_order_max])):
+            result += commute_group(group_a[split_orders[aorder]:split_orders[aorder+1]],
+                                    group_b[split_orders[border]:split_orders[border+1]])
+    return result
+
 def remove_zeros(group):
     group[:] = (a for a in group if a.scalar != 0)
 
@@ -319,12 +340,20 @@ def full_collect_terms(group):
     return [Ncproduct(sympy.simplify(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
 
 
-def mathematica_simplify(scalar):
+def mathematica_simplify(scalar, use_tempfile = False):
     sstr = mstr(scalar)
     parameter = ('ToString['
                  'Simplify[' + sstr +']'
                  ', InputForm]')
-    simpstring = check_output([qcommand,parameter])[0:-1].decode("utf-8")
+    simpstring = "Not set."
+    if use_tempfile:
+        script_file = tempfile.NamedTemporaryFile(mode = 'wt', delete=False)
+        script_file.write("Print["+parameter+"]")
+        script_file.close()
+        simpstring = check_output([command, '-script', script_file.name])[0:-1].decode("utf-8")
+        os.remove(script_file.name)
+    else:
+        simpstring = check_output([qcommand,parameter])[0:-1].decode("utf-8")
     try:
         return mathematica_parser(simpstring)
     except Exception as e:
@@ -342,19 +371,19 @@ def mathematica_series(scalar, varlist, order):
     simpstring = check_output([qcommand,parameter])[0:-1].decode("utf-8")
     return mathematica_parser(simpstring)
 
-def math_collect_terms(group):
+def math_collect_terms(group, use_tempfile = False):
     from collections import defaultdict
     D = defaultdict(list)
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].append(i)
-    return [Ncproduct(mathematica_simplify(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
+    return [Ncproduct(mathematica_simplify(sum([group[i].scalar for i in D[key]]), use_tempfile), list(key)) for key in D]
 
-def mathematica_simplify_group(group):
+def mathematica_simplify_group(group, use_tempfile = False):
     remove_zeros(group)
     for ncprod in group:
         sort_anticommuting_product(ncprod)
         set_squares_to_identity(ncprod)
-    group = math_collect_terms(group)
+    group = math_collect_terms(group, use_tempfile)
     remove_zeros(group)
     return group
 
@@ -395,7 +424,7 @@ def square_to_find_identity(group):
     return simplify_group([a*a for a in collect_terms(group)])
 
 def square_to_find_identity_scalar_up_to_order(group, order, split_orders):
-    """Assumes Hermitian"""
+    """Assumes Hermitian and operator strings odd in length"""
     D = defaultdict(dict)
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].update({bisect_right(split_orders,i)-1: i})
@@ -407,6 +436,24 @@ def square_to_find_identity_scalar_up_to_order(group, order, split_orders):
                 if jorder in positions:
                     result += (group[positions[iorder]].scalar
                                *(2-len(product)%4)*group[positions[jorder]].scalar)
+    return sympy.expand(result)
+
+def square_to_find_identity_scalar_up_to_order_poss_even(group, order, split_orders):
+    """Assumes Hermitian and operator strings odd in length"""
+    D = defaultdict(dict)
+    for i,ncprod in enumerate(group):
+        D[tuple(ncprod.product)].update({bisect_right(split_orders,i)-1: i})
+    result = 0
+    for torder in range(order+1):
+        for product, positions in D.items():
+            for iorder, index in positions.items():
+                jorder = torder - iorder
+                if jorder in positions:
+                    length = len(product)
+                    if length % 2 == 0:
+                        length +=1
+                    result += (group[positions[iorder]].scalar
+                               *(2-length%4)*group[positions[jorder]].scalar)
     return sympy.expand(result)
 
 def calculate_commutator(group_a,group_b):
@@ -871,7 +918,31 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
             subs_rules.pop(tempvar, None)
         return ret
 
-def check_normalisable(psi, fvars, order, orders, split_orders, zero_not_needed = False, update_splits = True, make_norm = True):
+
+
+def _not_edge_normalise(psi0, to_cancel):
+    #ipdb.set_trace()
+    szero = set(psi0.product)
+    scancel  = set(to_cancel.product)
+    intersect = (scancel & szero)
+    newproduct = sorted(list((scancel | szero) - intersect))
+    length = len(szero)-len(intersect)
+    if length % 2 == 0:
+        length += 1
+        print('Warning: Non-normalisable with odd number of operators: ' + str(to_cancel))
+    return Ncproduct((length%4-2)*to_cancel.scalar/(2*psi0.scalar), newproduct)
+
+
+def check_normalisable(psi,
+                       fvars,
+                       order,
+                       orders,
+                       split_orders,
+                       zero_not_needed = False,
+                       update_splits = True,
+                       make_norm = True,
+                       not_edge = False,
+                       simplify = sympy.simplify):
     matrixrows = {}
     cvector = []
     solutions = {}
@@ -881,9 +952,14 @@ def check_normalisable(psi, fvars, order, orders, split_orders, zero_not_needed 
         norm = square_group_to_order(psi, order, split_orders)
         to_cancel = [ncprod for ncprod in norm if ncprod.product]
         for ncprod in to_cancel:
-            if sympy.simplify(ncprod.scalar) != 0:
-                if make_norm and ncprod.product[0] != 1:
+            if simplify(ncprod.scalar) != 0:
+                if make_norm and ncprod.product[0] != 1 and not not_edge:
                     psi += [Ncproduct(-ncprod.scalar/2,[1]+ncprod.product)]
+                    split_orders[-1] += 1
+                elif (make_norm
+                      and not_edge):
+                      #and ncprod.product[:len(psi[0].product)] != psi[0].product):
+                    psi += [_not_edge_normalise(psi[0], ncprod)]
                     split_orders[-1] += 1
                 else:
                     raise ValueError('Non-normalisable: '+ str(to_cancel))
@@ -891,9 +967,14 @@ def check_normalisable(psi, fvars, order, orders, split_orders, zero_not_needed 
     sparse_normalise(psi, order, orders, fvars, cvector, matrixrows, split_orders, subspace=subspace)
     for i, row in matrixrows.items():
         if not row:
-            if sympy.simplify(cvector[i]) != 0:
+            if simplify(cvector[i]) != 0:
                 if make_norm and subspace[i].product[0] != 1:
                     psi += [Ncproduct(subspace[i].scalar/2,[1]+subspace[i].product)]
+                    split_orders[-1] += 1
+                elif (make_norm
+                      and not_edge
+                      and subspace[i].product[:len(psi[0].product)] != psi[0].product):
+                    psi += [_not_edge_normalise(psi[0], -subspace[i])]
                     split_orders[-1] += 1
                 else:
                     raise ValueError('Non-normalisable: '+ str(subspace[i]))
