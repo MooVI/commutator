@@ -201,6 +201,27 @@ def commute_group(group_a, group_b):
                 result += commute(a,b)
     return result
 
+
+def commute_with_perturbing_H(Hpert, group, split_orders):
+    result = []
+    for a in Hpert:
+        for b in group[split_orders[-2]:split_orders[-1]]:
+            if not (a.is_identity() or b.is_identity()):
+                result += commute(a,b)
+    return result
+
+def commute_up_to_order(group_a, group_b, order, split_orders_a, split_orders_b):
+    result = []
+    a_order_max = len(split_orders_a)-1
+    b_order_max = len(split_orders_b)-1
+    if a_order_max + b_order_max <= order:
+        return commute_group(group_a, group_b)
+    for aorder in range(a_order_max):
+        for border in range(min([order-aorder, b_order_max])):
+            result += commute_group(group_a[split_orders[aorder]:split_orders[aorder+1]],
+                                    group_b[split_orders[border]:split_orders[border+1]])
+    return result
+
 def remove_zeros(group):
     group[:] = (a for a in group if a.scalar != 0)
 
