@@ -21,4 +21,6 @@ _*
 *.m
 *log2
 *.psi
-*.nfs
+*.nfs*
+MathematicaScript
+*_temp.py
