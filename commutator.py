@@ -412,7 +412,7 @@ def square_to_find_identity(group):
     return simplify_group([a*a for a in collect_terms(group)])
 
 def square_to_find_identity_scalar_up_to_order(group, order, split_orders):
-    """Assumes Hermitian"""
+    """Assumes Hermitian and operator strings odd in length"""
     D = defaultdict(dict)
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].update({bisect_right(split_orders,i)-1: i})
@@ -424,6 +424,24 @@ def square_to_find_identity_scalar_up_to_order(group, order, split_orders):
                 if jorder in positions:
                     result += (group[positions[iorder]].scalar
                                *(2-len(product)%4)*group[positions[jorder]].scalar)
+    return sympy.expand(result)
+
+def square_to_find_identity_scalar_up_to_order_poss_even(group, order, split_orders):
+    """Assumes Hermitian and operator strings odd in length"""
+    D = defaultdict(dict)
+    for i,ncprod in enumerate(group):
+        D[tuple(ncprod.product)].update({bisect_right(split_orders,i)-1: i})
+    result = 0
+    for torder in range(order+1):
+        for product, positions in D.items():
+            for iorder, index in positions.items():
+                jorder = torder - iorder
+                if jorder in positions:
+                    length = len(product)
+                    if length % 2 == 0:
+                        length +=1
+                    result += (group[positions[iorder]].scalar
+                               *(2-length%4)*group[positions[jorder]].scalar)
     return sympy.expand(result)
 
 def calculate_commutator(group_a,group_b):
@@ -890,9 +908,14 @@ def check_normalisable(psi,
         norm = square_group_to_order(psi, order, split_orders)
         to_cancel = [ncprod for ncprod in norm if ncprod.product]
         for ncprod in to_cancel:
-            if sympy.simplify(ncprod.scalar) != 0:
-                if make_norm and ncprod.product[0] != 1:
+            if simplify(ncprod.scalar) != 0:
+                if make_norm and ncprod.product[0] != 1 and not not_edge:
                     psi += [Ncproduct(-ncprod.scalar/2,[1]+ncprod.product)]
+                    split_orders[-1] += 1
+                elif (make_norm
+                      and not_edge):
+                      #and ncprod.product[:len(psi[0].product)] != psi[0].product):
+                    psi += [_not_edge_normalise(psi[0], ncprod)]
                     split_orders[-1] += 1
                 else:
                     raise ValueError('Non-normalisable: '+ str(to_cancel))
@@ -900,9 +923,14 @@ def check_normalisable(psi,
     sparse_normalise(psi, order, orders, fvars, cvector, matrixrows, split_orders, subspace=subspace)
     for i, row in matrixrows.items():
         if not row:
-            if sympy.simplify(cvector[i]) != 0:
+            if simplify(cvector[i]) != 0:
                 if make_norm and subspace[i].product[0] != 1:
                     psi += [Ncproduct(subspace[i].scalar/2,[1]+subspace[i].product)]
+                    split_orders[-1] += 1
+                elif (make_norm
+                      and not_edge
+                      and subspace[i].product[:len(psi[0].product)] != psi[0].product):
+                    psi += [_not_edge_normalise(psi[0], -subspace[i])]
                     split_orders[-1] += 1
                 else:
                     raise ValueError('Non-normalisable: '+ str(subspace[i]))
