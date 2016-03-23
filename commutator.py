@@ -328,12 +328,20 @@ def full_collect_terms(group):
     return [Ncproduct(sympy.simplify(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
 
 
-def mathematica_simplify(scalar):
+def mathematica_simplify(scalar, use_tempfile = False):
     sstr = mstr(scalar)
     parameter = ('ToString['
                  'Simplify[' + sstr +']'
                  ', InputForm]')
-    simpstring = check_output([qcommand,parameter])[0:-1].decode("utf-8")
+    simpstring = "Not set."
+    if use_tempfile:
+        script_file = tempfile.NamedTemporaryFile(mode = 'wt', delete=False)
+        script_file.write("Print["+parameter+"]")
+        script_file.close()
+        simpstring = check_output([command, '-script', script_file.name])[0:-1].decode("utf-8")
+        os.remove(script_file.name)
+    else:
+        simpstring = check_output([qcommand,parameter])[0:-1].decode("utf-8")
     try:
         return mathematica_parser(simpstring)
     except Exception as e:
@@ -351,19 +359,19 @@ def mathematica_series(scalar, varlist, order):
     simpstring = check_output([qcommand,parameter])[0:-1].decode("utf-8")
     return mathematica_parser(simpstring)
 
-def math_collect_terms(group):
+def math_collect_terms(group, use_tempfile = False):
     from collections import defaultdict
     D = defaultdict(list)
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].append(i)
-    return [Ncproduct(mathematica_simplify(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
+    return [Ncproduct(mathematica_simplify(sum([group[i].scalar for i in D[key]]), use_tempfile), list(key)) for key in D]
 
-def mathematica_simplify_group(group):
+def mathematica_simplify_group(group, use_tempfile = False):
     remove_zeros(group)
     for ncprod in group:
         sort_anticommuting_product(ncprod)
         set_squares_to_identity(ncprod)
-    group = math_collect_terms(group)
+    group = math_collect_terms(group, use_tempfile)
     remove_zeros(group)
     return group
 
@@ -848,7 +856,31 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
             subs_rules.pop(tempvar, None)
         return ret
 
-def check_normalisable(psi, fvars, order, orders, split_orders, zero_not_needed = False, update_splits = True, make_norm = True):
+
+
+def _not_edge_normalise(psi0, to_cancel):
+    #ipdb.set_trace()
+    szero = set(psi0.product)
+    scancel  = set(to_cancel.product)
+    intersect = (scancel & szero)
+    newproduct = sorted(list((scancel | szero) - intersect))
+    length = len(szero)-len(intersect)
+    if length % 2 == 0:
+        length += 1
+        print('Warning: Non-normalisable with odd number of operators: ' + str(to_cancel))
+    return Ncproduct((length%4-2)*to_cancel.scalar/(2*psi0.scalar), newproduct)
+
+
+def check_normalisable(psi,
+                       fvars,
+                       order,
+                       orders,
+                       split_orders,
+                       zero_not_needed = False,
+                       update_splits = True,
+                       make_norm = True,
+                       not_edge = False,
+                       simplify = sympy.simplify):
     matrixrows = {}
     cvector = []
     solutions = {}
