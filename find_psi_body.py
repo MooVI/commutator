@@ -3,6 +3,13 @@ iofvars = START_IOFVARS
 split_orders = START_SPLIT_ORDERS
 normdict = START_NORMDICT
 
+norm_fail = False
+
+try:
+    FAIL_ON_NO_NORM
+except:
+    FAIL_ON_NO_NORM = True
+
 for test_order in range(START_ORDER, END_ORDER+1):
     Hcomm = c(H, psi)
     if not comm.check_group_at_least_order(Hcomm, test_order-1, orders):
@@ -12,7 +19,9 @@ for test_order in range(START_ORDER, END_ORDER+1):
 
     comm.print_subspace(subspace)
     cvector = comm.build_vector_to_cancel(comm.substitute_group(Hcomm, normdict), subspace)
+    del Hcomm
     psi = comm.substitute_group(psi, normdict, split_orders = split_orders)
+    del normdict
     subs_rules = {}
     iofvars = []
     psi_test = comm.sparse_solve_for_commuting_term(cvector,
@@ -40,6 +49,7 @@ for test_order in range(START_ORDER, END_ORDER+1):
             print(str(x)+': ' +str(normdict[x]))
     except Exception as e:
         print(str(e))
+        norm_fail = True
         normdict = {}
 
 
@@ -48,6 +58,9 @@ for test_order in range(START_ORDER, END_ORDER+1):
                     iofvars=iofvars,
                     split_orders=split_orders,
                     normdict=normdict)
+
+    if(norm_fail and FAIL_ON_NO_NORM):
+        raise ValueError("Not normalisable")
 
     iofvars = []
 
