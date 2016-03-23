@@ -17,7 +17,7 @@ import shutil
 import matlab.engine
 
 
-eng = matlab.engine.start_matlab()
+eng = matlab.engine.start_matlab("-nojvm")
 
 command='/home/kempj/bin/MathematicaScript'
 qcommand = '/home/kempj/bin/runMath'
@@ -28,6 +28,12 @@ def multiple_replace(string, rep_dict):
 
 def mathematica_parser(exprstring):
     return sympify(exprstring.replace('^', '**'), mathematica_parser.vardict)
+
+def matlab_parser(exprstring, matrix = False):
+    if matrix:
+        return sympify('Matri'+exprstring[5:].replace('^','**').replace('i', '*I'), mathematica_parser.vardict)
+    return sympify(exprstring.replace('^','**').replace('i', '*I'), mathematica_parser.vardict)
+
 
 mathematica_parser.vardict = {}
 
@@ -600,16 +606,22 @@ def print_subspace(subspace):
 
 def sparse_fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart, ind_col):
         #pdb.set_trace()
-        comm = calculate_commutator(Jpart, Ncproduct(1,to_cancel.product))
-        for ncprod in comm:
-           try:
-                ind_row = subspace[tuple(ncprod.product)]
-           except KeyError:
-                ind_row = len(subspace)
-                subspace[tuple(ncprod.product)] = ind_row
-                matrixrows[ind_row] = []
-                sparse_fill_subspace_rows(ncprod, matrixrows, subspace, Jpart, ind_row)
-           matrixrows[ind_row].append((ind_col, ncprod.scalar))
+        ind_cols = [ind_col]
+        to_cancels = [to_cancel]
+        count = 0
+        while count < len(ind_cols):
+            comm = calculate_commutator(Jpart, Ncproduct(1,to_cancels[count].product))
+            for ncprod in comm:
+                try:
+                    ind_row = subspace[tuple(ncprod.product)]
+                except KeyError:
+                    ind_row = len(subspace)
+                    subspace[tuple(ncprod.product)] = ind_row
+                    matrixrows[ind_row] = []
+                    ind_cols.append(ind_row)
+                    to_cancels.append(ncprod)
+                matrixrows[ind_row].append((ind_cols[count], ncprod.scalar))
+            count+=1
 
 def sparse_find_subspace(to_cancel, Jpart):
     subspace = OrderedDict()
@@ -667,20 +679,19 @@ def find_sub_subspaces(matrixrows):
     return [list(space) for space in merge([[el[0] for el in row] for rownum, row in matrixrows.items()])]
 
 
-def linear_solve(sparse_mat_rep, sub_cvector, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars):
+def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars):
+    global eng
+    MAX_TRYS = 2
     #return sympy.solve_linear_system(augmatrix,*fvars)
-    x_str = '[' + ' '.join(str(ind[0]+1) for ind in sparse_mat_rep)+']'
-    y_str = '[' + ' '.join(str(ind[1]+1) for ind in sparse_mat_rep)+']'
-    val_str = matlabstr([value for ind, value in sparse_mat_rep.items()])
-    b_str = matlabstr(sub_cvector)+"'"
+    if augmatrix.cols == 2 and augmatrix.rows == 1:
+        return {fvars[0]: augmatrix[0,1]/augmatrix[0,0]}
+    M_str = matlabstr(augmatrix[:,:-1])
+    b_str = matlabstr(augmatrix[:,-1])
     var_str = ';'.join(name+"=sym('"+name+ "', 'real')"
                        for name in mathematica_parser.vardict)+';\n'
     script = ('function ret = linearsolve()\n'+
               var_str+
-              'x = ' + x_str + ';\n'
-              'y = ' + y_str + ';\n'
-              'val = ' + val_str + ';\n'
-              'M = sparse(x, y, val);\n'
+              'M =' + M_str +';\n'
               'b = ' + b_str + ';\n'
               'Z = null(full(M));\n'
               "Zstr = '';\n"
@@ -693,26 +704,39 @@ def linear_solve(sparse_mat_rep, sub_cvector, fvars, iofvars, fvargen, newfvars,
                                               dir = './',
                                               suffix=".m")
     checkstring = "Not set."
-    try:
-        script_file.write(script)
-        script_file.close()
-        del script
-        checkstring = getattr(eng, script_file.name.split('/')[-1][:-2])().split('TBS')
-        solstring, nullstring = checkstring
-        #print(solstring)
-        #print(check_output([command,parameter])[2:-3].decode("utf-8").split(', TBS, '))
-        #ipdb.set_trace()
-        sols_list = sympify('Matri'+checkstring[5:].replace('^','**').replace('i', '*I'))
-    except Exception as e:
-        shutil.copy(script_file.name, './failed_matlab_script.m')
-        print(str(e))
-        print(checkstring)
-        return {}
-    finally:
-        os.remove(script_file.name)
+    script_file.write(script)
+    script_file.close()
+    del script
+    linsolve_run = True
+    trys = 0
+    while linsolve_run:
+        try:
+            checkstring = getattr(eng, script_file.name.split('/')[-1][:-2])().split('TBS')
+            solstring, nullstring = checkstring
+            if solstring[0:6]=='matrix':
+                sols_list = matlab_parser(solstring, matrix=True)
+            else:
+                sols_list = [matlab_parser(solstring)]
+        except Exception as e:
+            trys+=1
+            if trys < MAX_TRYS:
+                try:
+                    eng.quit()
+                except Exception as equiterror:
+                    print(str(equiterror))
+                eng = matlab.engine.start_matlab("-nojvm")
+            else:
+                shutil.copy(script_file.name, './failed_matlab_script.m')
+                os.remove(script_file.name)
+                print(str(e))
+                print(checkstring)
+                return {}
+        else:
+            linsolve_run = False
+            os.remove(script_file.name)
     if len(nullstring) > 2:
-        sepvecs = [sympify('Matri'+ nullvecstr.replace('^','**').replace('i', '*I'))
-                           for nullvecstr in nullstring.split(';matri')[1:]]
+        sepvecs = [matlab_parser(nullvecstr, matrix=True)
+                           for nullvecstr in nullstring.split(';')[1:]]
         for nullvec in sepvecs:
             if len_oldfvars > 0:
                 raise ValueError("Non empy iofvars not supported in Matlab!")
@@ -737,21 +761,18 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space,
                            fvargen, newfvars, tempgen, tempvars):
     sspacedict = dict(zip(sub_sub_space, range(len(sub_sub_space))))
     length = len(sub_sub_space)
-    sparse_mat_rep = OrderedDict()
-    sub_cvector = []
+    augmatrixrows = []
     rownumstore = [] #for debugging
-    row_count = 0
     for rownum, row in matrixrows.items():
         if row and row[0][0] in sub_sub_space:
+            augmatrixrows.append(length*[0]+[cvector[rownum]])
             rownumstore.append(rownum)
-            sub_cvector.append(cvector[rownum])
             for el in row:
-                sparse_mat_rep[(row_count, sspacedict[el[0]])] = el[1]
-            row_count += 1
+                augmatrixrows[-1][sspacedict[el[0]]] = el[1]
     fvars = [coeffs[ind] for ind in sub_sub_space]
+    augmatrix = Matrix(augmatrixrows)
     oldfvars = []
     if iofvars:
-        raise ValueError("iofvars not empty not supported for sparse matrices")
         #ipdb.set_trace()
         atoms = augmatrix.atoms(sympy.Symbol)
         for iofvar in subs_rules:
@@ -767,9 +788,9 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space,
                     coeff_val = -sympy.expand(augmatrix[row_ind,-1]).coeff(iofvar)
                     augmatrix[row_ind,-2] = coeff_val
                     augmatrix[row_ind,-1] += coeff_val*iofvar
-    sols = linear_solve(sparse_mat_rep, sub_cvector, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len(oldfvars))
+    sols = linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len(oldfvars))
     if not sols:
-        print(sparse_mat_rep)
+        print(repr(augmatrix))
         print(fvars)
         print(rownumstore)
         print(iofvars)
