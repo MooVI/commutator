@@ -214,14 +214,6 @@ def commute_group(group_a, group_b):
     return result
 
 
-def commute_with_perturbing_H(Hpert, group, split_orders):
-    result = []
-    for a in Hpert:
-        for b in group[split_orders[-2]:split_orders[-1]]:
-            if not (a.is_identity() or b.is_identity()):
-                result += commute(a,b)
-    return result
-
 def commute_up_to_order(group_a, group_b, order, split_orders_a, split_orders_b):
     result = []
     a_order_max = len(split_orders_a)-1
@@ -463,6 +455,16 @@ def calculate_commutator(group_a,group_b):
         group_b = [group_b]
     group = commute_group(group_a, group_b)
     return simplify_group(group)
+
+def commute_with_perturbing_H(Hpert, group, split_orders):
+    if not isinstance(group, list):
+        group = [group]
+    result = []
+    for a in Hpert:
+        for b in group[split_orders[-2]:split_orders[-1]]:
+            if not (a.is_identity() or b.is_identity()):
+                result += commute(a,b)
+    return simplify_group(result)
 
 def print_progress(i, length):
     print(str(i+1)+'/'+str(length), end = '\r')
@@ -764,6 +766,9 @@ def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars
                 sols_list = matlab_parser(solstring, matrix=True)
             else:
                 sols_list = [matlab_parser(solstring)]
+            if any(x in sols_list for x in [sympy.Symbol('Inf'), sympy.Symbol('Nan')]):
+                trys = MAX_TRYS
+                raise ValueError("Inconsistent matrix equation.")
         except Exception as e:
             trys+=1
             if trys < MAX_TRYS:
@@ -942,7 +947,8 @@ def check_normalisable(psi,
                        update_splits = True,
                        make_norm = True,
                        not_edge = False,
-                       simplify = sympy.simplify):
+                       simplify = sympy.simplify,
+                       Jpart = None):
     matrixrows = {}
     cvector = []
     solutions = {}
@@ -955,14 +961,20 @@ def check_normalisable(psi,
             if simplify(ncprod.scalar) != 0:
                 if make_norm and ncprod.product[0] != 1 and not not_edge:
                     psi += [Ncproduct(-ncprod.scalar/2,[1]+ncprod.product)]
+                    print("Adding " + str(psi[-1]) )
                     split_orders[-1] += 1
                 elif (make_norm
                       and not_edge):
                       #and ncprod.product[:len(psi[0].product)] != psi[0].product):
                     psi += [_not_edge_normalise(psi[0], ncprod)]
+                    print("Adding " + str(psi[-1]) )
                     split_orders[-1] += 1
                 else:
                     raise ValueError('Non-normalisable: '+ str(to_cancel))
+                if Jpart and calculate_commutator(Jpart, Ncproduct(1, psi[-1].product)):
+                    raise ValueError('Non-normalisable: '+ str(to_cancel)
+                                     + ".\n Canceling term " + str(psi[-1])
+                                     + " does not commute.")
     subspace = []
     sparse_normalise(psi, order, orders, fvars, cvector, matrixrows, split_orders, subspace=subspace)
     for i, row in matrixrows.items():
@@ -970,14 +982,20 @@ def check_normalisable(psi,
             if simplify(cvector[i]) != 0:
                 if make_norm and subspace[i].product[0] != 1:
                     psi += [Ncproduct(subspace[i].scalar/2,[1]+subspace[i].product)]
+                    print("Adding " + str(psi[-1]) )
                     split_orders[-1] += 1
                 elif (make_norm
                       and not_edge
                       and subspace[i].product[:len(psi[0].product)] != psi[0].product):
                     psi += [_not_edge_normalise(psi[0], -subspace[i])]
+                    print("Adding " + str(psi[-1]) )
                     split_orders[-1] += 1
                 else:
                     raise ValueError('Non-normalisable: '+ str(subspace[i]))
+                if Jpart and calculate_commutator(Jpart, Ncproduct(1, psi[-1].product)):
+                    raise ValueError('Non-normalisable: '+ str(subspace[i])
+                                     + ".\n Canceling term " + str(psi[-1])
+                                     + " does not commute.")
     sub_sub_spaces = find_sub_subspaces(matrixrows)
     length_ss = len(sub_sub_spaces)
     for i, ss_space in enumerate(sub_sub_spaces):

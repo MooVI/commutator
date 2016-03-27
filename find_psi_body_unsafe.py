@@ -11,7 +11,7 @@ except:
     FAIL_ON_NO_NORM = True
 
 for test_order in range(START_ORDER, END_ORDER+1):
-    Hcomm = comm.commute_with_perturbing_H(Hpert, psi, test_order, split_orders)
+    Hcomm = comm.commute_with_perturbing_H(small, psi, split_orders)
     subspace, matrixrows = comm.sparse_find_subspace(Hcomm, Jpart)
     comm.print_subspace(subspace)
     cvector = comm.build_vector_to_cancel(comm.substitute_group(Hcomm, normdict), subspace)
