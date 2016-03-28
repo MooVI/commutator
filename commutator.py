@@ -773,7 +773,14 @@ def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars
                     eng.quit()
                 except Exception as equiterror:
                     print(str(equiterror))
-                eng = matlab.engine.start_matlab("-nojvm")
+                try:
+                    eng = matlab.engine.start_matlab("-nojvm")
+                except Exception as estarterror:
+                    shutil.copy(script_file.name, './failed_matlab_script.m')
+                    os.remove(script_file.name)
+                    print(str(e))
+                    print(checkstring)
+                    return {}
             else:
                 shutil.copy(script_file.name, './failed_matlab_script.m')
                 os.remove(script_file.name)
@@ -783,6 +790,11 @@ def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars
         else:
             linsolve_run = False
             os.remove(script_file.name)
+    try:
+        eng.clearvars(nargout=0)
+        eng.clear(script_file.name, nargout=0)
+    except Exception as eclear:
+        print(eclear)
     if len(nullstring) > 2:
         sepvecs = [matlab_parser(nullvecstr, matrix=True)
                            for nullvecstr in nullstring.split(';')[1:]]
