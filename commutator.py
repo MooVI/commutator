@@ -12,7 +12,7 @@ from sympy.parsing.mathematica import mathematica
 import tempfile
 import os
 from mathematica_printer import mstr
-from matlab_printer import matlabstr
+from matlab_printer_numeric import matlabstr
 import shutil
 import matlab.engine
 
@@ -31,7 +31,7 @@ def mathematica_parser(exprstring):
 
 def matlab_parser(exprstring, matrix = False):
     if matrix:
-        return sympify('Matri'+exprstring[5:].replace('^','**').replace('i', '*I'), mathematica_parser.vardict)
+        return sympify(exprstring.replace('^','**').replace('i', '*I').split('\n'), mathematica_parser.vardict)
     return sympify(exprstring.replace('^','**').replace('i', '*I'), mathematica_parser.vardict)
 
 
@@ -745,9 +745,9 @@ def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars
               'Z = null(full(M));\n'
               "Zstr = '';\n"
               'for col= 1:size(Z,2)\n'
-              "Zstr = strcat(Zstr,';', char(Z(:,col)));\n"
+              "Zstr = strcat(Zstr,';', num2str(Z(:,col)','%10.8e\\n'));\n"
               'end\n'
-              "ret = strcat(char(linsolve(M, b)),'TBS', Zstr);")
+              "ret = strcat(num2str((pinv(M)*b)','%10.8e\\n'),'TBS', Zstr);")
     script_file = tempfile.NamedTemporaryFile(mode = 'wt',
                                               delete=False,
                                               dir = './',
@@ -762,10 +762,7 @@ def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars
         try:
             checkstring = getattr(eng, script_file.name.split('/')[-1][:-2])().split('TBS')
             solstring, nullstring = checkstring
-            if solstring[0:6]=='matrix':
-                sols_list = matlab_parser(solstring, matrix=True)
-            else:
-                sols_list = [matlab_parser(solstring)]
+            sols_list = matlab_parser(solstring, matrix=True)
             if any(x in sols_list for x in [sympy.Symbol('Inf'), sympy.Symbol('Nan')]):
                 trys = MAX_TRYS
                 raise ValueError("Inconsistent matrix equation.")
@@ -798,9 +795,10 @@ def linear_solve(augmatrix, fvars, iofvars, fvargen, newfvars, tempgen, tempvars
             else:
                 newfvar = next(fvargen)
                 newfvars.append(newfvar)
-            sols_list = [sol+newfvar*nullvecel
+            sols_list = [sol.evalf(15, chop=True)+newfvar*nullvecel.evalf(15, chop=True)
                          for sol, nullvecel in zip(sols_list, nullvec)]
-
+    else:
+        sols_list = [sol.evalf(15, chop=True) for sol in sols_list]
    #ipdb.set_trace()
     if not sols_list:
         return {}
@@ -958,7 +956,7 @@ def check_normalisable(psi,
         norm = square_group_to_order(psi, order, split_orders)
         to_cancel = [ncprod for ncprod in norm if ncprod.product]
         for ncprod in to_cancel:
-            if simplify(ncprod.scalar) != 0:
+            if ncprod.scalar.evalf(15, chop=True) != 0:
                 if make_norm and ncprod.product[0] != 1 and not not_edge:
                     psi += [Ncproduct(-ncprod.scalar/2,[1]+ncprod.product)]
                     print("Adding " + str(psi[-1]) )
@@ -979,7 +977,7 @@ def check_normalisable(psi,
     sparse_normalise(psi, order, orders, fvars, cvector, matrixrows, split_orders, subspace=subspace)
     for i, row in matrixrows.items():
         if not row:
-            if simplify(cvector[i]) != 0:
+            if cvector[i].evalf(15, chop=True) != 0:
                 if make_norm and subspace[i].product[0] != 1:
                     psi += [Ncproduct(subspace[i].scalar/2,[1]+subspace[i].product)]
                     print("Adding " + str(psi[-1]) )
