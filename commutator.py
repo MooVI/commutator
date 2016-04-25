@@ -722,7 +722,7 @@ def linear_solve(sparse_mat_rep, sub_cvector, fvars, iofvars, fvargen, newfvars,
               'b = SparseArray[' + cvector_str + '];'
               'ToString['
               '{'
-              'Simplify[LinearSolver[M, b]], TBS,'
+              'Simplify[LinearSolve[M, b]], TBS,'
               'NullSpace[M]'
               '}'
               ', InputForm] ];')
@@ -1070,3 +1070,38 @@ def fill_subspace_norm(Jpart, to_cancel, order):
     L = 2*order+1
     subspace_ops = build_odd_norm_subspace(L)
     return sparse_find_subspace(to_cancel+subspace_ops, Jpart)
+
+def get_yaml_poly(poly, gens):
+    s = sympy.Poly(poly, gens)
+    pows = [[float(e) for e in el] for el in s.monoms()]
+    coeffs = [float(sympy.N(coeff)) for coeff in s.coeffs()]
+    return {'pows':pows,'coeffs':coeffs}
+
+
+def save_to_c_poly(group,
+                   couplings,
+                   filename,
+                   norm_file = None,
+                   split_orders = None,
+                   order = None):
+    if not norm_file:
+        if split_orders:
+            if not order:
+                order = len(split_orders)-1
+            norm = square_to_find_identity_scalar_up_to_order(group, order, split_orders)
+        else:
+            norm = square_to_find_identity(group)[0].scalar
+    data = OrderedDict([('Psi',[]), ('Norm', {'poly': get_yaml_poly(norm, couplings)})])
+    for ncprod in reversed(group):
+        xpos = []
+        zpos = []
+        sigprod = convert_to_sigma(ncprod)
+        for a in sigprod.product:
+            if a % 2 == 0:
+                xpos.append((a//2)-1)
+            else:
+                zpos.append(((a+1)//2)-1)
+        data['Psi'].append({'xpos': xpos,
+                              'zpos': zpos,
+                              'poly': get_yaml_poly(sigprod.scalar, couplings)})
+    write_yaml(data, filename)
