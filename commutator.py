@@ -1,4 +1,5 @@
 from sympy import symbols, I, pretty, sympify, Matrix, S
+from sympy.printing.ccode import ccode
 from sympy.solvers.solveset import linsolve, linear_eq_to_matrix
 from bisect import bisect_right
 import ipdb
@@ -1078,6 +1079,14 @@ def get_yaml_poly(poly, gens):
     return {'pows':pows,'coeffs':coeffs}
 
 
+
+
+def get_c_function(scalar, couplings):
+    args_replace = dict(zip([str(el) for el in couplings],
+                            ['args['+str(i)+']' for i in range(len(couplings))]))
+    return multiple_replace(ccode(scalar), args_replace)
+
+
 def save_to_c_poly(group,
                    couplings,
                    filename,
@@ -1104,4 +1113,44 @@ def save_to_c_poly(group,
         data['Psi'].append({'xpos': xpos,
                               'zpos': zpos,
                               'poly': get_yaml_poly(sigprod.scalar, couplings)})
+    write_yaml(data, filename)
+
+
+
+
+
+
+def save_to_c_general(group,
+                   couplings,
+                   filename,
+                   norm_file = None,
+                   split_orders = None,
+                   order = None):
+    if not norm_file:
+        if split_orders:
+            if not order:
+                order = len(split_orders)-1
+            norm = square_to_find_identity_scalar_up_to_order(group, order, split_orders)
+        else:
+            norm = square_to_find_identity(group)[0].scalar
+    with open(filename+'.h', 'w') as header:
+        header.write('mpreal norm(std::vector<mpreal> args){\n'
+                     'return '+get_c_function(norm, couplings)+';\n}\n'
+                     'std::vector<std::function<mpreal(std::vector<mpreal>)> > psi_coeffs = {')
+        data = OrderedDict([('Psi',[])])
+        for i, ncprod in enumerate(reversed(group)):
+            xpos = []
+            zpos = []
+            sigprod = convert_to_sigma(ncprod)
+            for a in sigprod.product:
+                if a % 2 == 0:
+                    xpos.append((a//2)-1)
+                else:
+                    zpos.append(((a+1)//2)-1)
+            data['Psi'].append({'xpos': xpos,
+                              'zpos': zpos,
+                              })
+            header.write('[](std::vector<mpreal>){return'
+                         +get_c_function(sigprod.scalar, couplings)
+                         +(';},' if i < (len(group)-1) else ';};'))
     write_yaml(data, filename)
