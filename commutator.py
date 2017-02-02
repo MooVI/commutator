@@ -1116,10 +1116,6 @@ def save_to_c_poly(group,
     write_yaml(data, filename)
 
 
-
-
-
-
 def save_to_c_general(group,
                    couplings,
                    filename,
@@ -1150,7 +1146,7 @@ def save_to_c_general(group,
             data['Psi'].append({'xpos': xpos,
                               'zpos': zpos,
                               })
-            header.write('[](std::vector<mpreal>){return'
+            header.write('[](std::vector<mpreal> args){return '
                          +get_c_function(sigprod.scalar, couplings)
-                         +(';},' if i < (len(group)-1) else ';};'))
+                         +(';},' if i < (len(group)-1) else ';}};'))
     write_yaml(data, filename)
