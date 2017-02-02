@@ -1210,6 +1210,6 @@ def save_to_c_general(group,
                               'zpos': zpos,
                               })
             header.write('[](std::vector<mpreal> args){return '
-                         +get_c_function(sigprod.scalar, couplings)
+                         +get_c_function(sympy.simplify(sigprod.scalar), couplings)
                          +(';},' if i < (len(group)-1) else ';}};'))
     write_yaml(data, filename)
