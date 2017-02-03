@@ -11,12 +11,8 @@ except:
     FAIL_ON_NO_NORM = True
 
 for test_order in range(START_ORDER, END_ORDER+1):
-    Hcomm = c(H, psi)
-    if not comm.check_group_at_least_order(Hcomm, test_order-1, orders):
-        raise ValueError('Psi does not to order '+ str(test_order-1) + '!')
+    Hcomm = comm.commute_with_perturbing_H(small, psi, split_orders)
     subspace, matrixrows = comm.sparse_find_subspace(Hcomm, Jpart)
-
-
     comm.print_subspace(subspace)
     cvector = comm.build_vector_to_cancel(comm.substitute_group(Hcomm, normdict), subspace)
     del Hcomm
@@ -42,9 +38,9 @@ for test_order in range(START_ORDER, END_ORDER+1):
     psi = comm.substitute_group(psi, subs_rules, split_orders)
 
     orders.update(zip(iofvars,[test_order]*len(iofvars)))
-    psi += psi_test
+    psi += comm.mathematica_simplify_group(psi_test, use_tempfile=True)
     try:
-        normdict = comm.check_normalisable(psi, iofvars, test_order, orders, split_orders)
+        normdict = comm.check_normalisable(psi, iofvars, test_order, orders, split_orders, not_edge=True)
         for x in sorted(normdict.keys(), key = lambda x: int(str(x)[2+len(str(test_order)):])):
             print(str(x)+': ' +str(normdict[x]))
     except Exception as e:
@@ -65,14 +61,14 @@ for test_order in range(START_ORDER, END_ORDER+1):
     iofvars = []
 
     if NORM_AS_YOU_GO:
-        prop = comm.square_to_find_identity_scalar_up_to_order(psi, test_order, split_orders)
+        prop = comm.square_to_find_identity_scalar_up_to_order_poss_even(psi, test_order, split_orders)
         with open(FILEHEAD+'_norm', mode = 'w') as f:
             f.write(str(prop)+'\n\n')
             f.write(latex(prop).replace('\\\\', '\\'))
 
 
 if not NORM_AS_YOU_GO:
-    prop = comm.square_to_find_identity_scalar_up_to_order(psi, test_order, split_orders)
+    prop = comm.square_to_find_identity_scalar_up_to_order_poss_even(psi, test_order, split_orders)
     with open(FILEHEAD+'_norm', mode = 'w') as f:
         f.write(str(prop)+'\n\n')
         f.write(latex(prop).replace('\\\\', '\\'))

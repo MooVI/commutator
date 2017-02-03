@@ -721,7 +721,6 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space,
     for rownum, row in matrixrows.items():
         if row and row[0][0] in sub_sub_space:
             rownumstore.append(rownum)
-            sub_cvector.append(cvector[rownum])
             for el in row:
                 sparse_mat_rep[(row_count, sspacedict[el[0]])] = el[1]
             row_count += 1
