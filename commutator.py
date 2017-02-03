@@ -13,7 +13,10 @@ from sympy.parsing.mathematica import mathematica
 import tempfile
 import os
 from mathematica_printer import mstr
+from matlab_printer import matlabstr
 import shutil
+from choose_linear_solve import linear_solve
+
 
 command='/home/kempj/bin/MathematicaScript'
 qcommand = '/home/kempj/bin/runMath'
@@ -24,6 +27,7 @@ def multiple_replace(string, rep_dict):
 
 def mathematica_parser(exprstring):
     return sympify(exprstring.replace('^', '**'), mathematica_parser.vardict)
+
 
 mathematica_parser.vardict = {}
 
@@ -175,15 +179,11 @@ class SigmaProduct(Ncproduct):
                 print('Unknown operator ' + op)
         return result
 
-
-
-
 def postmultiply(group,a):
      return [b*a for b in group]
 
 def premultiply(a, group):
     return [a*b for b in group]
-
 
 def commute(a,b):
     if a.is_product():
@@ -203,14 +203,6 @@ def commute_group(group_a, group_b):
                 result += commute(a,b)
     return result
 
-
-def commute_with_perturbing_H(Hpert, group, split_orders):
-    result = []
-    for a in Hpert:
-        for b in group[split_orders[-2]:split_orders[-1]]:
-            if not (a.is_identity() or b.is_identity()):
-                result += commute(a,b)
-    return result
 
 def commute_up_to_order(group_a, group_b, order, split_orders_a, split_orders_b):
     result = []
@@ -277,7 +269,6 @@ def set_squares_to_identity(ncprod):
             i+=1
 
 def convert_to_sigma(ncprod):
-    #ipdb.set_trace()
     ret = SigmaProduct(1, [])
     ret.scalar = ncprod.scalar
     for el in ncprod.product:
@@ -429,7 +420,7 @@ def square_to_find_identity_scalar_up_to_order(group, order, split_orders):
     return sympy.expand(result)
 
 def square_to_find_identity_scalar_up_to_order_poss_even(group, order, split_orders):
-    """Assumes Hermitian and operator strings odd in length"""
+    """Assumes Hermitian"""
     D = defaultdict(dict)
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].update({bisect_right(split_orders,i)-1: i})
@@ -453,6 +444,16 @@ def calculate_commutator(group_a,group_b):
         group_b = [group_b]
     group = commute_group(group_a, group_b)
     return simplify_group(group)
+
+def commute_with_perturbing_H(Hpert, group, split_orders):
+    if not isinstance(group, list):
+        group = [group]
+    result = []
+    for a in Hpert:
+        for b in group[split_orders[-2]:split_orders[-1]]:
+            if not (a.is_identity() or b.is_identity()):
+                result += commute(a,b)
+    return simplify_group(result)
 
 def print_progress(i, length):
     print(str(i+1)+'/'+str(length), end = '\r')
@@ -558,7 +559,6 @@ def write_yaml(data, filename, **kwargs):
                      **kwargs)
 
 def save_group(group, filename, iofvars=None, split_orders = None, normdict = None):
-  #  ipdb.set_trace()
     if iofvars is None:
         iofvars = []
     if split_orders is None:
@@ -597,7 +597,6 @@ def substitute_group(group, subs_rules, split_orders = None):
 def fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart):
     row_to_fill = matrixrows[subspace[tuple(to_cancel.product)]]
     if not row_to_fill:
-        #pdb.set_trace()
         comm = calculate_commutator(Jpart, Ncproduct(1,to_cancel.product))
         row_to_fill[:] = [0]*len(subspace)
         for ncprod in comm:
@@ -612,11 +611,6 @@ def fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart):
                 matrixrows.append([])
                 fill_subspace_rows(ncprod, matrixrows, subspace, Jpart)
            row_to_fill[ind] = ncprod.scalar
-
-
-
-
-
 
 def find_subspace(to_cancel, Jpart):
     subspace = OrderedDict()
@@ -642,17 +636,22 @@ def print_subspace(subspace):
         print(str(item)+ ': ' + ' '.join([Ncproduct.stringify(Ncproduct,a) for a in key]))
 
 def sparse_fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart, ind_col):
-        #pdb.set_trace()
-        comm = calculate_commutator(Jpart, Ncproduct(1,to_cancel.product))
-        for ncprod in comm:
-           try:
-                ind_row = subspace[tuple(ncprod.product)]
-           except KeyError:
-                ind_row = len(subspace)
-                subspace[tuple(ncprod.product)] = ind_row
-                matrixrows[ind_row] = []
-                sparse_fill_subspace_rows(ncprod, matrixrows, subspace, Jpart, ind_row)
-           matrixrows[ind_row].append((ind_col, ncprod.scalar))
+        ind_cols = [ind_col]
+        to_cancels = [to_cancel]
+        count = 0
+        while count < len(ind_cols):
+            comm = calculate_commutator(Jpart, Ncproduct(1,to_cancels[count].product))
+            for ncprod in comm:
+                try:
+                    ind_row = subspace[tuple(ncprod.product)]
+                except KeyError:
+                    ind_row = len(subspace)
+                    subspace[tuple(ncprod.product)] = ind_row
+                    matrixrows[ind_row] = []
+                    ind_cols.append(ind_row)
+                    to_cancels.append(ncprod)
+                matrixrows[ind_row].append((ind_cols[count], ncprod.scalar))
+            count+=1
 
 def sparse_find_subspace(to_cancel, Jpart):
     subspace = OrderedDict()
@@ -709,64 +708,6 @@ def merge(lsts):
 def find_sub_subspaces(matrixrows):
     return [list(space) for space in merge([[el[0] for el in row] for rownum, row in matrixrows.items()])]
 
-
-def linear_solve(sparse_mat_rep, sub_cvector, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars):
-    #return sympy.solve_linear_system(augmatrix,*fvars)
-    sparse_str = ('SparseArray[{'
-                  + ','.join(['{'+str(ind[0]+1)+','+str(ind[1]+1)+'}' for ind in sparse_mat_rep])
-                  + '}->{'
-                  + ','.join([mstr(value) for ind, value in sparse_mat_rep.items()])
-                  + '}]')
-    cvector_str = '{'+','.join([mstr(val) for val in sub_cvector]) + '}'
-    script = ('Print['
-              'M = ' + sparse_str + ';'
-              'b = SparseArray[' + cvector_str + '];'
-              'ToString['
-              '{'
-              'Simplify[LinearSolve[M, b]], TBS,'
-              'NullSpace[M]'
-              '}'
-              ', InputForm] ];')
-    script_file = tempfile.NamedTemporaryFile(mode = 'wt', delete=False)
-    checkstring = "Not set."
-    try:
-        script_file.write(script)
-        script_file.close()
-        del script
-        checkstring = check_output([command, '-script', script_file.name])[2:-3].decode("utf-8").split(', TBS, ')
-        solstring, nullstring = checkstring
-        #print(solstring)
-        #print(check_output([command,parameter])[2:-3].decode("utf-8").split(', TBS, '))
-        #ipdb.set_trace()
-        sols_list =  [mathematica_parser(sol)
-                      for sol in solstring[:-1].split(',')]
-    except Exception as e:
-        shutil.copy(script_file.name, './failed_script.m')
-        print(str(e))
-        print(checkstring)
-        return {}
-    finally:
-        os.remove(script_file.name)
-    if len(nullstring) > 2:
-        sepvecs = nullstring[1:-1].split('}, ')
-        for nullvec in sepvecs:
-            nullvec = nullvec[1:].split(',')
-            if any(nullvecel != 0
-                   for nullvecel in nullvec[len(nullvec)-len_oldfvars:]):
-                newfvar = next(tempgen)
-                iofvars.append(newfvar)
-                tempvars.append(newfvar)
-            else:
-                newfvar = next(fvargen)
-                newfvars.append(newfvar)
-            sols_list = [sol+newfvar*mathematica_parser(nullvecel)
-                         for sol, nullvecel in zip(sols_list, nullvec)]
-   #ipdb.set_trace()
-    if not sols_list:
-        return {}
-    sols = dict(zip(fvars, sols_list))
-    return {var: sol for var, sol in sols.items() if var is not sol}
-
 def solve_for_sub_subspace(matrixrows, sub_sub_space,
                            coeffs, cvector,
                            iofvars, subs_rules,
@@ -788,7 +729,6 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space,
     oldfvars = []
     if iofvars:
         raise ValueError("iofvars not empty not supported for sparse matrices")
-        #ipdb.set_trace()
         atoms = augmatrix.atoms(sympy.Symbol)
         for iofvar in subs_rules:
             if iofvar in atoms:
@@ -803,7 +743,7 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space,
                     coeff_val = -sympy.expand(augmatrix[row_ind,-1]).coeff(iofvar)
                     augmatrix[row_ind,-2] = coeff_val
                     augmatrix[row_ind,-1] += coeff_val*iofvar
-    sols = linear_solve(sparse_mat_rep, sub_cvector, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len(oldfvars))
+    sols = linear_solve(sparse_mat_rep, sub_cvector, length, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len(oldfvars))
     if not sols:
         print(sparse_mat_rep)
         print(fvars)
@@ -836,28 +776,12 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
     solutions = {}
     if subs_rules is None:
         subs_rules = {}
-    #deal with empty rows
-    # for i, row in matrixrows.items():
-    #     if not row:
-    #         if sympy.simplify(cvector[i]) != 0:
-    #             poss = False
-    #             for iofvar in iofvars:
-    #                 if iofvar in cvector[i].atoms(sympy.Symbol):
-    #                     sub_sub_spaces.append([i])
-    #                     print('Warning, new sspace: ' + str(i))
-    #                     poss = True
-    #             if not poss:
-    #                 print(matrixrows)
-    #                 print(cvector)
-    #                 raise ValueError('Error term to cancel in null')
     length_ss = len(sub_sub_spaces)
     fvargen = sympy.numbered_symbols(fvarname)
     tempgen = sympy.numbered_symbols('temp')
     tempvars = []
     newfvars = []
     for i, ss_space in enumerate(sub_sub_spaces):
-        #if i == 4:
-        #ipdb.set_trace()
         solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
                                                 fvars, cvector, iofvars,
                                                 subs_rules, fvargen, newfvars, tempgen, tempvars))
@@ -889,7 +813,6 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
 
 
 def _not_edge_normalise(psi0, to_cancel):
-    #ipdb.set_trace()
     szero = set(psi0.product)
     scancel  = set(to_cancel.product)
     intersect = (scancel & szero)
@@ -910,7 +833,8 @@ def check_normalisable(psi,
                        update_splits = True,
                        make_norm = True,
                        not_edge = False,
-                       simplify = sympy.simplify):
+                       simplify = sympy.simplify,
+                       Jpart = None):
     matrixrows = {}
     cvector = []
     solutions = {}
@@ -923,14 +847,20 @@ def check_normalisable(psi,
             if simplify(ncprod.scalar) != 0:
                 if make_norm and ncprod.product[0] != 1 and not not_edge:
                     psi += [Ncproduct(-ncprod.scalar/2,[1]+ncprod.product)]
+                    print("Adding " + str(psi[-1]) )
                     split_orders[-1] += 1
                 elif (make_norm
                       and not_edge):
                       #and ncprod.product[:len(psi[0].product)] != psi[0].product):
                     psi += [_not_edge_normalise(psi[0], ncprod)]
+                    print("Adding " + str(psi[-1]) )
                     split_orders[-1] += 1
                 else:
                     raise ValueError('Non-normalisable: '+ str(to_cancel))
+                if Jpart and calculate_commutator(Jpart, Ncproduct(1, psi[-1].product)):
+                    raise ValueError('Non-normalisable: '+ str(to_cancel)
+                                     + ".\n Canceling term " + str(psi[-1])
+                                     + " does not commute.")
     subspace = []
     sparse_normalise(psi, order, orders, fvars, cvector, matrixrows, split_orders, subspace=subspace)
     for i, row in matrixrows.items():
@@ -938,14 +868,20 @@ def check_normalisable(psi,
             if simplify(cvector[i]) != 0:
                 if make_norm and subspace[i].product[0] != 1:
                     psi += [Ncproduct(subspace[i].scalar/2,[1]+subspace[i].product)]
+                    print("Adding " + str(psi[-1]) )
                     split_orders[-1] += 1
                 elif (make_norm
                       and not_edge
                       and subspace[i].product[:len(psi[0].product)] != psi[0].product):
                     psi += [_not_edge_normalise(psi[0], -subspace[i])]
+                    print("Adding " + str(psi[-1]) )
                     split_orders[-1] += 1
                 else:
                     raise ValueError('Non-normalisable: '+ str(subspace[i]))
+                if Jpart and calculate_commutator(Jpart, Ncproduct(1, psi[-1].product)):
+                    raise ValueError('Non-normalisable: '+ str(subspace[i])
+                                     + ".\n Canceling term " + str(psi[-1])
+                                     + " does not commute.")
     sub_sub_spaces = find_sub_subspaces(matrixrows)
     length_ss = len(sub_sub_spaces)
     for i, ss_space in enumerate(sub_sub_spaces):
@@ -1147,6 +1083,6 @@ def save_to_c_general(group,
                               'zpos': zpos,
                               })
             header.write('[](std::vector<mpreal> args){return '
-                         +get_c_function(sigprod.scalar, couplings)
+                         +get_c_function(sympy.simplify(sigprod.scalar), couplings)
                          +(';},' if i < (len(group)-1) else ';}};'))
     write_yaml(data, filename)
