@@ -17,7 +17,8 @@ def matlab_parser(exprstring, matrix = False):
         return sympify('Matri'+exprstring[5:].replace('^','**').replace('i', '*I'), mathematica_parser.vardict)
     return sympify(exprstring.replace('^','**').replace('i', '*I'), mathematica_parser.vardict)
 
-def linear_solve(sparse_mat_rep, sub_cvector, length, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars):
+def linear_solve(sparse_mat_rep, sub_cvector, length, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars, vardict):
+    mathematica_parser.vardict = vardict
     global eng
     MAX_TRYS = 2
     matrix = sympy.zeros(len(sub_cvector), length)

@@ -1,6 +1,6 @@
 import sympy
 
-def linear_solve(sparse_mat_rep, sub_cvector, length, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars):
+def linear_solve(sparse_mat_rep, sub_cvector, length, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars, vardict):
     augmatrix = sympy.zeros(len(sub_cvector), length+1)
     for index, value in sparse_mat_rep.items():
         augmatrix[index[0],index[1]] = value

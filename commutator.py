@@ -743,7 +743,9 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space,
                     coeff_val = -sympy.expand(augmatrix[row_ind,-1]).coeff(iofvar)
                     augmatrix[row_ind,-2] = coeff_val
                     augmatrix[row_ind,-1] += coeff_val*iofvar
-    sols = linear_solve(sparse_mat_rep, sub_cvector, length, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len(oldfvars))
+    sols = linear_solve(sparse_mat_rep, sub_cvector, length, fvars,
+                        iofvars, fvargen, newfvars, tempgen, tempvars,
+                        len(oldfvars), mathematica_parser.vardict)
     if not sols:
         print(sparse_mat_rep)
         print(fvars)
