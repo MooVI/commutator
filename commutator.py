@@ -342,12 +342,19 @@ def mathematica_simplify(scalar, use_tempfile = False):
         print(simpstring)
 
 def mathematica_series(scalar, varlist, order):
+    definition = """multiTaylor[f_, {vars_?VectorQ, pt_?VectorQ, n_Integer?NonNegative}] :=
+Sum[Nest[(vars - pt).# &, (D[f, {vars, \[FormalK]}] /.
+Thread[vars -> pt]), \[FormalK]]/\[FormalK]!, {\[FormalK], 0,
+n}, Method -> "Procedural"]""".replace('\n','')
     sstr = mstr(scalar)
-    varsstr = ','.join(['{'+str(var) +', 0, ' + str(order) +'}' for var in varlist])
-    parameter = ('ToString[' +
-                 'Series['+
+    varsstr = ('{'
+               +'{'+','.join([str(var) for var in varlist])+'},'
+               +'{'+','.join([str(0)]*len(varlist))+'},'
+               + str(order+1)+'}')
+    parameter = (definition+';ToString[' +
+                 'Expand[multiTaylor['+
                  sstr+
-                 ',' +varsstr+']'
+                 ',' +varsstr+']]'
                  ', InputForm]')
     simpstring = check_output([qcommand,parameter])[0:-1].decode("utf-8")
     return mathematica_parser(simpstring)
@@ -388,6 +395,9 @@ def full_simplify_group(group):
 
 def multiply_groups(group_a, group_b):
     return simplify_group([a*b for a in group_a for b in group_b])
+
+def subtract_groups(group_a, group_b):
+    return simplify_group(group_a+premultiply(-1, group_b))
 
 def multiply_conjugate_groups(group_a, group_b):
     return simplify_group([a.conjugate()*b for a in group_a for b in group_b])
