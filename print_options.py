@@ -6,7 +6,7 @@ from sympy import symbols, Symbol
 
 def main(argv):
     try:
-        opts,args = getopt.getopt(argv, 'scvtbof')
+        opts,args = getopt.getopt(argv, 'scvtbofz')
     except getopt.GetoptError:
         print ("usage: print_options.py [-s][-c][-v]")
         sys.exit(2)
@@ -20,6 +20,7 @@ def main(argv):
     extract_free = False
     bare = False
     order = False
+    zero_free = False
     for opt, arg in opts:
         if opt =='-s':
             sub = True
@@ -37,7 +38,9 @@ def main(argv):
             order = True
         if opt == '-f':
             extract_free = True
-    if sub:
+        if opt == '-z':
+            zero_free = True
+    if sub or zero_free:
         psi = load_group(argv[1], iofvars = iofvars, normdict=normdict)
     else:
         psi = load_group(argv[1], iofvars = iofvars)
@@ -45,6 +48,9 @@ def main(argv):
         psi = [el for el in psi if any(i in iofvars for i in el.scalar.atoms(Symbol))]
     if sub:
         psi = substitute_group(psi, normdict)
+    if zero_free:
+        psi = substitute_group(psi, dict(zip(iofvars,[0]*len(iofvars))))
+        remove_zeros(psi)
     if collect:
         psi = collect_terms(psi)
         remove_zeros(psi)

@@ -31,7 +31,7 @@ START_NORMDICT = {}
 
 orders.update(zip(START_IOFVARS,[START_ORDER-1]*len(START_IOFVARS)))
 
-FILEHEAD = 'jto1psi_matlab'
+FILEHEAD = 'jto1psi_matlab_factor_2'
 NORM_AS_YOU_GO = True
 
 # START_NORMDICT = comm.check_normalisable(START_PSI,

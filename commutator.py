@@ -748,6 +748,7 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space,
                         len(oldfvars), mathematica_parser.vardict)
     if not sols:
         print(sparse_mat_rep)
+        print(sub_cvector)
         print(fvars)
         print(rownumstore)
         print(iofvars)
