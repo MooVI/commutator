@@ -89,13 +89,13 @@ class MathematicaStrPrinter(StrPrinter):
         #    return 'Exp['+str(2*expr.base.n)+ 'I Pi /'+ str(expr.base.n) + ']'
 
         if expr.exp is S.Half and not rational:
-            return "sqrt(%s)" % self._print(expr.base)
+            return "Sqrt[%s]" % self._print(expr.base)
 
         if expr.is_commutative:
             if -expr.exp is S.Half and not rational:
                 # Note: Don't test "expr.exp == -S.Half" here, because that will
                 # match -0.5, which we don't want.
-                return "1/sqrt(%s)" % self._print(expr.base)
+                return "1/Sqrt[%s]" % self._print(expr.base)
             if expr.exp is -S.One:
                 # Similarly to the S.Half case, don't test with "==" here.
                 return '1/%s' % self.parenthesize(expr.base, PREC)
