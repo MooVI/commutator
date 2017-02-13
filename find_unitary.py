@@ -16,20 +16,29 @@ N = comm.Ncproduct
 #vardict = {'f': f, 'V':V}
 #orders = {V:1,f:1}
 
-PSI_NAME = "xyzfast_r7.yaml"
-NORM_NAME = "xyzfast_norm"
-OUTPUT = "xyzuni"
-X, Y = symbols('X Y', real=True)
-ivars = [X,Y]
-vardict = {'X': X, 'Y':Y}
-orders = {X:1,Y:1}
+PSI_NAME = "psi_j2_matlab_large_r10"
+NORM_NAME = "psi_j2_matlab_large_norm"
+OUTPUT = "j2_smalluni"
+J2, f = symbols('J2 f', real=True)
+vardict = {'f': f, 'J2':J2}
+orders = {J2:1,f:1}
+
+
+# PSI_NAME = "xyzfast_r7.yaml"
+# NORM_NAME = "xyzfast_norm"
+# OUTPUT = "xyzuni"
+# X, Y = symbols('X Y', real=True)
+# ivars = [X,Y]
+# vardict = {'X': X, 'Y':Y}
+# orders = {X:1,Y:1}
 
 
 p.orders = orders
 comm.mathematica_parser.vardict = vardict
+ivars = list(vardict.values())
 
 START_ORDER = 1
-END_ORDER = 7
+END_ORDER = 10
 
 def next_permutationS(l):
     '''Changes a list to its next permutation, in place. From

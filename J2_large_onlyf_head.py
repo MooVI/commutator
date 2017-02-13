@@ -20,9 +20,11 @@ Jpart =  J1part + J2part
 H = small + Jpart
 
 START_ORDER = 1
-END_ORDER = 4
+END_ORDER = 8
 
-START_PSI = N(1, 'a1')
+#START_PSI = N(1, 'a1')
+
+START_GS = []
 
 START_IOFVARS = []
 START_SPLIT_ORDERS = [0, 1]
@@ -32,7 +34,7 @@ START_NORMDICT = {}
 
 orders.update(zip(START_IOFVARS,[START_ORDER-1]*len(START_IOFVARS)))
 
-FILEHEAD = 'J2large_onlyf'
+FILEHEAD = 'J2large_onlyf_gs'
 NORM_AS_YOU_GO = True
 
 # START_NORMDICT = comm.check_normalisable(START_PSI,
