@@ -1,4 +1,4 @@
-from sympy import symbols, I, pretty, sympify, Matrix, S
+from sympy import symbols, I, pretty, sympify, Matrix, S, factorial
 from sympy.printing.ccode import ccode
 from sympy.solvers.solveset import linsolve, linear_eq_to_matrix
 from bisect import bisect_right
@@ -185,22 +185,35 @@ def postmultiply(group,a):
 def premultiply(a, group):
     return [a*b for b in group]
 
+
+def sort_anticommuting_list(nums):
+    i = 0
+    nflips = 0
+    a = nums
+    while i < len(a)-1:
+        if a[i] > a[i+1]:
+            a[i], a[i+1] = a[i+1],a[i]
+            nflips += 1
+            while i>0 and a[i] < a[i-1]:
+                a[i], a[i-1] = a[i-1], a[i]
+                nflips +=1
+                i -= 1
+        i+=1
+    return (-1)**nflips
+
 def commute(a,b):
-    if a.is_product():
-        return postmultiply(commute(a.get_unit(0),b), a[1:]) + premultiply(a.get_unit(0),commute(a[1:],b))
-    elif b.is_product():
-        return postmultiply(commute(a,b.get_unit(0)), b[1:]) + premultiply(b.get_unit(0),commute(a,b[1:]))
-    elif a == b:
-        return [0*a*b]
-    else:
-        return [2*a*b]
+    total = a.product + b.product
+    rev =  b.product + a.product
+    sign = sort_anticommuting_list(total)- sort_anticommuting_list(rev)
+    return Ncproduct(sign*a.scalar*b.scalar, total)
+
 
 def commute_group(group_a, group_b):
     result = []
     for a in group_a:
         for b in group_b:
             if not (a.is_identity() or b.is_identity()):
-                result += commute(a,b)
+                result.append(commute(a,b))
     return result
 
 
@@ -413,6 +426,13 @@ def square_group_to_order(group, order, split_orders):
 def square_to_find_identity(group):
     """Assumes Hermitian"""
     return simplify_group([a*a for a in collect_terms(group)])
+
+def square_to_find_identity_scalar(group):
+    """Assumes Hermitian"""
+    result = 0
+    for ncprod in collect_terms(group):
+        result += (sympy.expand(ncprod.scalar*ncprod.scalar))*(2-len(ncprod.product)%4)
+    return result
 
 def square_to_find_identity_scalar_up_to_order(group, order, split_orders):
     """Assumes Hermitian and operator strings odd in length"""
@@ -908,6 +928,64 @@ def check_normalisable(psi,
                 solutions[fvar] = 0
     return solutions
 
+
+def _check_sz1_uninvertible(ncprod):
+    """See if invertible by checking if length even w/out 1 if present"""
+    first = (ncprod.product[0] == 1)
+    return (len(ncprod)-first*1) % 2 == 0
+
+def _invert_sz1_G_nofvar(to_invert, Gs):
+    for ncprod in to_invert:
+        if sympy.simplify(ncprod.scalar) != 0:
+            if _check_sz1_uninvertible(ncprod):
+                raise ValueError("Not invertible: " + str(ncprod))
+            else:
+                if ncprod.product[0] == 1:
+                    Gs[-1] += Ncproduct(-I/2*ncprod.scalar, ncprod.product[1:])
+                else:
+                    Gs[-1] += Ncproduct(-I/2*ncprod.scalar, [1]+ncprod.product[:])
+
+
+def _clean_to_invert_of_fvars(to_invert, fvars):
+    cvector = []
+    solutions = {}
+    matrixrows = {}
+    ind = 0
+    print(to_invert)
+    for ncprod in to_invert:
+        if _check_sz1_uninvertible(ncprod):
+            term = sympy.expand(ncprod.scalar)
+            matrixrows[ind] = []
+            row = matrixrows[ind]
+            for ind_col, coeff in enumerate(fvars):
+                product = term.coeff(coeff)
+                if product != 0:
+                    row.append((ind_col, product))
+            const_term = term.as_coeff_add(*fvars)[0]
+            cvector.append(const_term)
+            ind+=1
+    sub_sub_spaces = find_sub_subspaces(matrixrows)
+    length_ss = len(sub_sub_spaces)
+    for i, ss_space in enumerate(sub_sub_spaces):
+        solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
+                                                fvars, cvector, None,
+                                                None, None, None, None, None))
+        print_progress(i, length_ss)
+    for fvar in fvars:
+        if fvar not in solutions:
+            print("Zeroing fvar: " +str(fvar))
+            solutions[fvar] = 0
+    return substitute_group(to_invert, solutions)
+
+
+def invert_sz1_G(to_invert, Gs, fvars):
+    Gs.append([])
+    if fvars:
+        to_invert = _clean_to_invert_of_fvars(to_invert, fvars)
+    _invert_sz1_G_nofvar(to_invert, Gs)
+
+
+
 def truncate_fill(to_cancel, coeffs, matrixrows, cvector, start_ind = 0):
     ind = start_ind
     to_cancel = [el.scalar for el in to_cancel]
@@ -1099,3 +1177,141 @@ def save_to_c_general(group,
                          +get_c_function(sympy.simplify(sigprod.scalar), couplings)
                          +(';},' if i < (len(group)-1) else ';}};'))
     write_yaml(data, filename)
+
+
+def next_permutationS(l):
+    '''Changes a list to its next permutation, in place. From
+    http://stackoverflow.com/questions/6534430/why-does-pythons-iterto
+    ols-permutations-contain-duplicates-when-the-original
+    Returns true unless wrapped around so result is lexicographically smaller. '''
+    n = len(l)
+    #Step 1: Find tail
+    last = n-1 #tail is from `last` to end
+    while last>0:
+        if l[last-1] < l[last]: break
+        last -= 1
+    #Step 2: Increase the number just before tail
+    if last>0:
+        small = l[last-1]
+        big = n-1
+        while l[big] <= small: big -= 1
+        l[last-1], l[big] = l[big], small
+    #Step 3: Reverse tail
+    i = last
+    j = n-1
+    while i < j:
+        l[i], l[j] = l[j], l[i]
+        i += 1
+        j -= 1
+    return last>0
+
+def accel_asc(n):
+    """From http://jeromekelleher.net/generating-integer-partitions.html
+    Generates integer partions
+    """
+    a = [0 for i in range(n + 1)]
+    k = 1
+    y = n - 1
+    while k != 0:
+        x = a[k - 1] + 1
+        k -= 1
+        while 2 * x <= y:
+            a[k] = x
+            y -= x
+            k += 1
+        l = k + 1
+        while x <= y:
+            a[k] = x
+            a[l] = y
+            yield a[:k + 2]
+            x += 1
+            y -= 1
+        a[k] = x + y
+        y = x + y - 1
+        yield a[:k + 1]
+
+
+
+def unitary_transform(to_trans, Gs, max_order, inverse = False):
+    """Unitary transform of form U = e^i(Gs[0]+Gs[1]+1]+...)"""
+    result = to_trans[:]
+    for torder in range(1,max_order+1):
+        for orderset in accel_asc(torder):
+            numcomms = len(orderset)
+            if inverse:
+                taylorscalar = ((-I)**numcomms)/factorial(numcomms)
+            else:
+                taylorscalar = (I**numcomms)/factorial(numcomms)
+            while True:
+                cumul = to_trans[:]
+                for order in orderset:
+                    cumul = commute_group(cumul, Gs[order-1])
+                result += premultiply(taylorscalar,cumul)
+                if not next_permutationS(orderset):
+                    break
+    return simplify_group(result)
+
+def unitary_transform_to_order(to_trans, Gs, torder,
+                               not_single_comm = False,
+                               inverse = False):
+    """Unitary transform of form U = e^i(Gs[0]+Gs[1]+1]+...)
+    at order torder. Assumes to_trans is zeroth order.
+    """
+    if torder == 0:
+        return to_trans[:]
+    result = []
+    for orderset in accel_asc(torder):
+        numcomms = len(orderset)
+        if numcomms != 1 or not not_single_comm:
+            if inverse:
+                taylorscalar = ((-I)**numcomms)/factorial(numcomms)
+            else:
+                taylorscalar = (I**numcomms)/factorial(numcomms)
+            while True:
+                cumul = to_trans[:]
+                for order in orderset:
+                    cumul = commute_group(cumul, Gs[order-1])
+                result += premultiply(taylorscalar,cumul)
+                if not next_permutationS(orderset):
+                    break
+    return simplify_group(result)
+
+def exponentiate_to_order(Gs, torder, inverse = False):
+    """Calculate U = e^i(Gs[0]+Gs[1]+1]+...)"""
+    if torder == 0:
+        return [Ncproduct(1,[])]
+    result = []
+    for orderset in accel_asc(torder):
+        numcomms = len(orderset)
+        if inverse:
+            taylorscalar = ((-I)**numcomms)/factorial(numcomms)
+        else:
+            taylorscalar = (I**numcomms)/factorial(numcomms)
+            while True:
+                cumul = [1]
+                for order in orderset:
+                    cumul = multiply_groups(cumul, Gs[order-1])
+                result += premultiply(taylorscalar,cumul)
+                if not next_permutationS(orderset):
+                    break
+    return simplify_group(result)
+
+def trace_inner_product(group_a, group_b):
+    """Careful with non-Hermitian operators here"""
+    from collections import defaultdict
+    DA = defaultdict(list)
+    DB = defaultdict(list)
+    result = 0
+    for i,ncprod in enumerate(group_a):
+        DA[tuple(ncprod.product)].append(i)
+    for i,ncprod in enumerate(group_b):
+        DB[tuple(ncprod.product)].append(i)
+    ind_pairs = [ [i, j] for key in set(DA.keys()).intersection(DB.keys())
+                  for i in DA[key] for j in DB[key]]
+    for i, j in ind_pairs:
+        length = len(group_a[i].product)
+        if length % 2 == 0:
+            length +=1
+        result += (group_a[i].scalar
+                   *(2-length%4)*group_b[j].scalar)
+    return result
