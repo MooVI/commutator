@@ -28,7 +28,7 @@ for test_order in range(START_ORDER, END_ORDER+1):
     for x in sorted(subs_rules.keys(), key = lambda x: int(str(x)[2+len(str(test_order)):])):
         print(str(x)+': ' +str(subs_rules[x]))
     print('\n')
-    print(g_comm)
+    #print(g_comm)
     comm.invert_sz1_G(g_comm, Gs, iofvars)
 
     #orders.update(zip(iofvars,[test_order]*len(iofvars)))

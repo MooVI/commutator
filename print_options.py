@@ -57,8 +57,8 @@ def main(argv):
     if convert:
         psi = convert_group(psi)
     if order:
-        V, f, V1, V2, X, Y = symbols('V f V1 V2 X Y')
-        orders = {V:1,f:1,V1:1,V2:1, X:1, Y:1}
+        V, f, V1, V2, X, Y, Vy = symbols('V f V1 V2 X Y Vy')
+        orders = {V:1,f:1,V1:1,V2:1, X:1, Y:1, Vy:1}
         psi = order_group(psi, orders)
 
     if texify:

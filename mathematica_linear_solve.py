@@ -14,6 +14,8 @@ def mathematica_parser(exprstring):
 
 def linear_solve(sparse_mat_rep, sub_cvector, length, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars, vardict):
     mathematica_parser.vardict = vardict
+    if len(sparse_mat_rep) == 1:
+        return {fvars[0]: sub_cvector[0]/sparse_mat_rep[(0,0)]}
     #return sympy.solve_linear_system(augmatrix,*fvars)
     sparse_str = ('SparseArray[{'
                   + ','.join(['{'+str(ind[0]+1)+','+str(ind[1]+1)+'}' for ind in sparse_mat_rep])
@@ -54,8 +56,7 @@ def linear_solve(sparse_mat_rep, sub_cvector, length, fvars, iofvars, fvargen, n
         sepvecs = nullstring[1:-1].split('}, ')
         for nullvec in sepvecs:
             nullvec = nullvec[1:].split(',')
-            if any(nullvecel != 0
-                   for nullvecel in nullvec[len(nullvec)-len_oldfvars:]):
+            if False:#any(nullvecel != 0 #for nullvecel in nullvec[len(nullvec)-len_oldfvars:]):
                 newfvar = next(tempgen)
                 iofvars.append(newfvar)
                 tempvars.append(newfvar)

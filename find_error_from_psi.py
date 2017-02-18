@@ -4,18 +4,19 @@ from commutator import load_group, substitute_group, calculate_commutator, squar
 from commutator import Ncproduct
 
 N = Ncproduct
-NAME = "j2_small_gs_r11.yaml"
+NAME = "jto1_yy_gpsi_r12.yaml"
 ORDER = 0
-END_ORDER = 11
+END_ORDER = 12
 
 L=40
-V,J,f, J2 = symbols('V J f J2')
-orders = {V:1,f:1, J2:1}
+V,J,f, J2, Vy = symbols('V J f J2 Vy')
+orders = {V:1,f:1, J2:1, Vy:1}
 
 fpart = [N(I*f, [2*j+1,2*j+2]) for j in range(L)]
 Vpart = [N(V, [2*j+1,2*j+2,2*j+3,2*j+4]) for j in range(L-2)]
 V2part = [Ncproduct(J2, [2*j+2,2*j+3,2*j+4,2*j+5]) for j in range(L-2)]
-small = fpart+V2part
+Vypart = [N(-I*Vy, [2*j+1, 2*j+4]) for j in range(L-1)]
+small = fpart+Vypart
 
 iofvars = []
 split_orders = []
