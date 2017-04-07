@@ -11,7 +11,7 @@ from sympy.parsing.sympy_parser import (parse_expr, convert_xor,
 
 transformations = (convert_xor, auto_number, auto_symbol_add)
 
-command = './linsolve'
+command = './linsolve_gauss'
 
 def linear_solve(sparse_mat_rep, sub_cvector, length, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars, vardict):
     matrix = sympy.zeros(len(sub_cvector), length)

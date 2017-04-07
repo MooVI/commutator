@@ -18,12 +18,12 @@ Zpart = [N(-I, [2*j+2,2*j+3]) for j in range(L-1)]
 Jpart = Zpart
 H = small +Jpart
 
-START_ORDER = 9
-END_ORDER = 14
+START_ORDER = 1
+END_ORDER = 12
 
 START_PSI = N(1, 'a1')
 
-START_GS = comm.load_group('xyzuni_r8.yaml')
+START_GS = []#comm.load_group('xyzuni_r8.yaml')
 
 START_IOFVARS = []
 START_SPLIT_ORDERS = [0, 1]

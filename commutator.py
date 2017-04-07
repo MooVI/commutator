@@ -936,7 +936,7 @@ def _check_sz1_uninvertible(ncprod):
 
 def _invert_sz1_G_nofvar(to_invert, Gs):
     for ncprod in to_invert:
-        if sympy.simplify(ncprod.scalar) != 0:
+        #if sympy.simplify(ncprod.scalar) != 0:
             if _check_sz1_uninvertible(ncprod):
                 raise ValueError("Not invertible: " + str(ncprod))
             else:
