@@ -6,9 +6,9 @@ from sympy import symbols, Symbol
 
 def main(argv):
     try:
-        opts,args = getopt.getopt(argv, 'scvtbofz')
+        opts,args = getopt.getopt(argv, 'scvtbofzu')
     except getopt.GetoptError:
-        print ("usage: print_options.py [-s][-c][-v]")
+        print ("usage: print_options.py [-scvtbofzu]")
         sys.exit(2)
     iofvars = []
     split_orders = []
@@ -21,6 +21,7 @@ def main(argv):
     bare = False
     order = False
     zero_free = False
+    unitary = False
     for opt, arg in opts:
         if opt =='-s':
             sub = True
@@ -40,8 +41,16 @@ def main(argv):
             extract_free = True
         if opt == '-z':
             zero_free = True
+        if opt == '-u':
+            unitary = True
+            
     if sub or zero_free:
         psi = load_group(argv[1], iofvars = iofvars, normdict=normdict)
+    elif unitary:
+        gs = load_group(argv[1])
+        psi = []
+        for g in gs:
+            psi+=g
     else:
         psi = load_group(argv[1], iofvars = iofvars)
     if extract_free:
