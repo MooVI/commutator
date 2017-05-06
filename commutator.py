@@ -31,6 +31,20 @@ def mathematica_parser(exprstring):
 
 mathematica_parser.vardict = {}
 
+def sort_anticommuting_list(a):
+    i = 0
+    nflips = 0
+    while i < len(a)-1:
+        if a[i] > a[i+1]:
+            a[i], a[i+1] = a[i+1],a[i]
+            nflips += 1
+            while i>0 and a[i] < a[i-1]:
+                a[i], a[i-1] = a[i-1], a[i]
+                nflips +=1
+                i -= 1
+        i+=1
+    return (-1)**nflips
+
 class Ncproduct:
     def __init__(self, scalar, product):
         self.scalar = scalar
@@ -125,11 +139,17 @@ class Ncproduct:
         else:
             return 'a' + str((a+1)//2)
 
-    def _texify_stringify(self, a):
-        if a % 2 == 0:
-            return 'b_' + str(a//2)
+    def _texify_stringify(self, a, init_string = None):
+        if init_string is None:
+            if a % 2 == 0:
+                return 'b_' + str(a//2)
+            else:
+                return 'a_' + str((a+1)//2)
         else:
-            return 'a_' + str((a+1)//2)
+            if a % 2 == 0:
+                return 'b_{'+init_string+'+' + str(a//2 - 1)+'}'
+            else:
+                return 'a_{'+init_string+'+'+ str((a+1)//2 - 1)+'}'
 
     def destringify(self, string):
         result = []
@@ -146,100 +166,27 @@ class Ncproduct:
         else:
             return []
 
-    def texify(self):
+    def texify(self, init_string = None):
         tex = sympy.latex(self.scalar)
         if (sympify(self.scalar).func ==sympy.Add):
             tex = '\\left (' + tex + '\\right )'
         return ' '.join([tex]
-                       +[self._texify_stringify(a) for a in self.product])
+                        +[self._texify_stringify(a, init_string) for a in self.product])
+
+    def sort(self):
+        self.scalar *= sort_anticommuting_list(self.product)
+
+    def commute(self, right):
+        """Commutes so that self.commute(right) = [self, right]"""
+        total = self.product + right.product
+        rev =  right.product + self.product
+        sign = sort_anticommuting_list(total)- sort_anticommuting_list(rev)
+        return Ncproduct(sign*self.scalar*right.scalar, total)
 
 
-class SigmaProduct(Ncproduct):
-    def stringify(self, a):
-        if a % 2 == 0:
-            return 'x' + str(a//2)
-        else:
-            return 'z' + str((a+1)//2)
-
-    def _texify_stringify(self, a):
-        if a % 2 == 0:
-            return '\\sigma^x_{' + str(a//2)+'}'
-        else:
-            return '\\sigma^z_{' + str((a+1)//2)+'}'
-
-    def destringify(self, string):
-        result = []
-        string = string.replace('\u22c5', ' ')
-        for op in string.split(' '):
-            if op[0] == 'z':
-                result.append(int(op[1:])*2-1)
-            elif op[0] == 'x':
-                result.append(int(op[1:])*2)
-            else:
-                print('Unknown operator ' + op)
-        return result
-
-def postmultiply(group,a):
-     return [b*a for b in group]
-
-def premultiply(a, group):
-    return [a*b for b in group]
-
-
-def sort_anticommuting_list(nums):
+def sort_pauli_list(a):
     i = 0
     nflips = 0
-    a = nums
-    while i < len(a)-1:
-        if a[i] > a[i+1]:
-            a[i], a[i+1] = a[i+1],a[i]
-            nflips += 1
-            while i>0 and a[i] < a[i-1]:
-                a[i], a[i-1] = a[i-1], a[i]
-                nflips +=1
-                i -= 1
-        i+=1
-    return (-1)**nflips
-
-def commute(a,b):
-    total = a.product + b.product
-    rev =  b.product + a.product
-    sign = sort_anticommuting_list(total)- sort_anticommuting_list(rev)
-    return Ncproduct(sign*a.scalar*b.scalar, total)
-
-
-def commute_group(group_a, group_b):
-    result = []
-    for a in group_a:
-        for b in group_b:
-            if not (a.is_identity() or b.is_identity()):
-                result.append(commute(a,b))
-    return result
-
-
-def commute_up_to_order(group_a, group_b, order, split_orders_a, split_orders_b):
-    result = []
-    a_order_max = len(split_orders_a)-1
-    b_order_max = len(split_orders_b)-1
-    if a_order_max + b_order_max <= order:
-        return commute_group(group_a, group_b)
-    for aorder in range(a_order_max):
-        for border in range(min([order-aorder, b_order_max])):
-            result += commute_group(group_a[split_orders[aorder]:split_orders[aorder+1]],
-                                    group_b[split_orders[border]:split_orders[border+1]])
-    return result
-
-def remove_zeros(group):
-    group[:] = (a for a in group if a.scalar != 0)
-
-def conjugate_group(group):
-    return [a.conjugate() for a in group]
-
-
-def sort_pauli_product(ncprod):
-    i = 0
-    nflips = 0
-    a = ncprod.product
     while i < len(a)-1:
         diff = a[i] - a[i+1]
         if diff > 0:
@@ -254,22 +201,62 @@ def sort_pauli_product(ncprod):
                         nflips +=1
                 i -= 1
         i+=1
-    ncprod.scalar = ncprod.scalar * (-1)**nflips
+    return (-1)**nflips
 
-def sort_anticommuting_product(ncprod):
-    i = 0
-    nflips = 0
-    a = ncprod.product
-    while i < len(a)-1:
-        if a[i] > a[i+1]:
-            a[i], a[i+1] = a[i+1],a[i]
-            nflips += 1
-            while i>0 and a[i] < a[i-1]:
-                a[i], a[i-1] = a[i-1], a[i]
-                nflips +=1
-                i -= 1
-        i+=1
-    ncprod.scalar = ncprod.scalar * (-1)**nflips
+
+class SigmaProduct(Ncproduct):
+    def stringify(self, a):
+        if a % 2 == 0:
+            return 'x' + str(a//2)
+        else:
+            return 'z' + str((a+1)//2)
+
+    def _texify_stringify(self, a, init_string = None):
+        if init_string is None:
+            if a % 2 == 0:
+                return '\\sigma^x_{' + str(a//2)+'}'
+            else:
+                return '\\sigma^z_{' + str((a+1)//2)+'}'
+        else:
+            if a % 2 == 0:
+                return '\\sigma^x_{' +init_string+'+'  + str(a//2 -1)+'}'
+            else:
+                return '\\sigma^z_{' +init_string+'+' + str((a+1)//2 -1)+'}'
+
+    def destringify(self, string):
+        result = []
+        string = string.replace('\u22c5', ' ')
+        for op in string.split(' '):
+            if op[0] == 'z':
+                result.append(int(op[1:])*2-1)
+            elif op[0] == 'x':
+                result.append(int(op[1:])*2)
+            else:
+                print('Unknown operator ' + op)
+        return result
+
+    def sort(self):
+        self.scalar *= sort_pauli_list(self.product)
+
+    def commute(self, right):
+        """Commutes so that self.commute(right) = [self, right]"""
+        total = self.product + right.product
+        rev =  right.product + self.product
+        sign = sort_pauli_list(total)- sort_pauli_list(rev)
+        return SigmaProduct(sign*self.scalar*right.scalar, total)
+
+
+def postmultiply(group,a):
+     return [b*a for b in group]
+
+def premultiply(a, group):
+    return [a*b for b in group]
+
+def remove_zeros(group):
+    group[:] = (a for a in group if a.scalar != 0)
+
+def conjugate_group(group):
+    return [a.conjugate() for a in group]
 
 def set_squares_to_identity(ncprod):
     i = 0
@@ -290,7 +277,7 @@ def convert_to_sigma(ncprod):
             ret.product += [i for i in range(2,el,2)]+ [el-1, el]
         else:
             ret.product += [i for i in range(2,el,2)]+[el]
-    sort_pauli_product(ret)
+    ret.sort()
     set_squares_to_identity(ret)
     return ret
 
@@ -305,19 +292,9 @@ def convert_from_sigma(sigma):
         else:
             ret.product += [i for i in range(1,el,1)]+[el]
             ret.scalar *= (-I)**((el-1)//2)
-    sort_anticommuting_product(ret)
+    ret.sort()
     set_squares_to_identity(ret)
     return ret
-
-def convert_group(group):
-    if not isinstance(group, list):
-        group = [group]
-    if isinstance(group[0], SigmaProduct):
-        return [convert_from_sigma(el) for el in group]
-    elif isinstance(group[0], Ncproduct):
-        return [convert_to_sigma(el) for el in group]
-    else:
-        raise ValueError('Unrecognised conversion asked for!')
 
 def collect_terms(group):
     from collections import defaultdict
@@ -332,6 +309,135 @@ def full_collect_terms(group):
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].append(i)
     return [Ncproduct(sympy.simplify(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
+
+class TransInvSum:
+    """Can be either Ncproduct or SigmaProduct, despite code names"""
+    def __getitem__(self, ind):
+        return self.ncprods[ind]
+
+    def __init__(self, ncprods_list, check_base = False):
+        """If width is given, you are vouching the sum is correct,
+        check_base will be effectively False.
+        """
+        if not isinstance(ncprods_list, list):
+            ncprods_list = [ncprods_list]
+        self.ncprods = ncprods_list
+        if check_base:
+            self.rebase()
+
+    def get_width(self):
+        return max((ncprod.product[-1] for ncprod in self.ncprods))
+
+    def rebase(self):
+        """Assumes products are ordered."""
+        for ncprod in self.ncprods:
+            if ncprod[0] is not 1 and ncprod[0] is not 2:
+                diff = ncprod[0]-(ncprod[0] % 2) + 2
+                ncprod[:] = [el - diff for el in ncprod]
+
+    def __add__(self, other):
+        """Adds translational inv. intelligently, otherwise assumes
+        you just want to add to sum.
+        """
+        if isinstance(other, TransInvSum):
+            return TransInvSum(self.ncprods + other.ncprods)
+        else:
+            return self+TransInvSum(other, check_base = True)
+
+    def __radd__(self, other):
+        """Adds translational inv. intelligently, otherwise assumes
+        you just want to add to sum.
+        """
+        if isinstance(other, TransInvSum):
+            return TransInvSum(other.ncprods+self.ncprods)
+        else:
+             return TransInvSum(other, check_base=True)+self
+
+    def __sub__(self, other):
+        """Adds translational inv. intelligently, otherwise assumes
+        you just want to add to sum.
+        """
+        if isinstance(other, TransInvSum):
+            return self + (-1)*other
+        else:
+            return self + (-1)*TransInvSum(other, check_base=True)
+
+    def __rsub__(self, other):
+        """Adds translational inv. intelligently, otherwise assumes
+        you just want to add to sum.
+        """
+        if isinstance(other, TransInvSum):
+            return other + (-1)*self
+        else:
+            return TransInvSum(other, check_base=True)+(-1)*self
+
+    def __rmul__(self, other):
+        return TransInvSum([other*ncprod for ncprod in self.ncprods], self.width)
+
+    def __mul__(self, other):
+        return TransInvSum([ncprod*other for ncprod in self.ncprods], self.width)
+
+    def __repr__(self):
+        return '\n'.join(repr(ncprod) for ncprod in self.ncprods)
+
+    def conjugate(self):
+        return TransInvSum([ncprod.conjugate() for ncprod in self.nprods])
+
+    def __len__(self):
+        return len(self.ncprods)
+
+    def __str__(self):
+        return ('\n'.join([str(ncprod) for ncprod in self.ncprods]))
+
+    def texify(self, orders):
+        return('\\begin{align*}\n \\sum_j '
+               +'\\\\\n'.join('&' + a.texify('j').replace('\\\\','\\')
+                              for a in self.ncprods)+'\n\\end{align*}')
+    def convert(self):
+        newncprods = []
+        if isinstance(self.ncprods[0], Ncproduct):
+            for ncprod in self.ncprods:
+                if len(ncprods) % 2 != 0:
+                    raise ValueError("Non-even number of Majorana fermions"
+                                     "will lead to trailing strings in spin basis,"
+                                     "which is not supported by convert.")
+                newncprods.append(convert_to_sigma(self.ncprod[i]))
+            return TransInvSum(newncprods, check_base = True)
+        elif isinstance(self.ncprods[0], SigmaProduct):
+            for ncprod in self.ncprods:
+                if len(sum(el%2 for el in ncprod)) % 2 != 0:
+                    raise ValueError("Non-even number of \\sigma^z operators"
+                                     "will lead to trailing strings in fermion basis,"
+                                     "which is not supported by convert.")
+                newncprods.append(convert_from_sigma(ncprod))
+            return TransInvSum(newncprods, check_base=True)
+        else:
+            raise ValueError('Unrecognised conversion asked for!')
+
+    def simplify(self):
+        """Returns self for legacy reasons with compatability with simplify_group"""
+        remove_zeros(self.ncprods)
+        for ncprod in self.ncprods:
+            ncprod.sort()
+            set_squares_to_identity(ncprod)
+        self.rebase()
+        self.ncprods = collect_terms(self.ncprods)
+        remove_zeros(self.ncprods)
+        return self
+
+
+
+def convert_group(group):
+    if isinstance(group, TransInvSum):
+        return group.convert()
+    if not isinstance(group, list):
+        group = [group]
+    if isinstance(group[0], SigmaProduct):
+        return [convert_from_sigma(el) for el in group]
+    elif isinstance(group[0], Ncproduct):
+        return [convert_to_sigma(el) for el in group]
+    else:
+        raise ValueError('Unrecognised conversion asked for!')
 
 
 def mathematica_simplify(scalar, use_tempfile = False):
@@ -382,16 +488,18 @@ def math_collect_terms(group, use_tempfile = False):
 def mathematica_simplify_group(group, use_tempfile = False):
     remove_zeros(group)
     for ncprod in group:
-        sort_anticommuting_product(ncprod)
+        ncprod.sort()
         set_squares_to_identity(ncprod)
     group = math_collect_terms(group, use_tempfile)
     remove_zeros(group)
     return group
 
 def simplify_group(group):
+    if isinstance(group, TransInvSum):
+        return group.simplify()
     remove_zeros(group)
     for ncprod in group:
-        sort_anticommuting_product(ncprod)
+        ncprod.sort()
         set_squares_to_identity(ncprod)
     group = collect_terms(group)
     remove_zeros(group)
@@ -400,7 +508,7 @@ def simplify_group(group):
 def full_simplify_group(group):
     remove_zeros(group)
     for ncprod in group:
-        sort_anticommuting_product(ncprod)
+        ncprod.sort()
         set_squares_to_identity(ncprod)
     group = full_collect_terms(group)
     remove_zeros(group)
@@ -467,12 +575,79 @@ def square_to_find_identity_scalar_up_to_order_poss_even(group, order, split_ord
                                *(2-length%4)*group[positions[jorder]].scalar)
     return sympy.expand(result)
 
+def commute_group(group_a, group_b):
+    result = []
+    for a in group_a:
+        for b in group_b:
+            if not (a.is_identity() or b.is_identity()):
+                result.append(a.commute(b))
+    return TransInvSum(result)
+
+def commute_group_semi_inv(group_a, sumB, sign = 1):
+    result = []
+    prodtype = type(group_a[0])
+    for a in group_a:
+        for b in sumB:
+            if not (a.is_identity() or b.is_identity()):
+                maxB = (b+1)//2
+                start_a = (a+1)//2
+                for j in range(start_a-maxB, max_ind):
+                    result.append(a.commute(prodtype(sign*b.scalar, [el+j*2+a[0] for el in b])))
+    return result
+
+def commute_group_inv(sumA, sumB):
+    result = []
+    prodtype = type(sumA[0])
+    for a in sumA:
+        for b in sumB:
+            if not (a.is_identity() or b.is_identity()):
+                maxA = (a+1)//2
+                maxB = (b+1)//2
+                if maxA <= maxB:
+                    fixed = prodtype(b.scalar, [el+2*(maxA-1) for el in b])
+                    sign = 1
+                    var = a
+                    max_ind = maxB
+                if maxA > maxB:
+                    fixed = prodtype(a.scalar, [el+2*(maxB-1) for el in a])
+                    sign = -1
+                    var = b
+                    max_ind = maxA
+                for j in range(max_ind):
+                    result.append(prodtype(sign*var.scalar, [el+j*2 for el in var]).commute(fixed))
+    return TransInvSum(result)
+
+
+def commute_up_to_order(group_a, group_b, order, split_orders_a, split_orders_b):
+    result = []
+    a_order_max = len(split_orders_a)-1
+    b_order_max = len(split_orders_b)-1
+    if a_order_max + b_order_max <= order:
+        return commute_group(group_a, group_b)
+    for aorder in range(a_order_max):
+        for border in range(min([order-aorder, b_order_max])):
+            result += commute_group(group_a[split_orders[aorder]:split_orders[aorder+1]],
+                                    group_b[split_orders[border]:split_orders[border+1]])
+    return result
+
 def calculate_commutator(group_a,group_b):
-    if not isinstance(group_a, list):
-        group_a = [group_a]
-    if not isinstance(group_b, list):
-        group_b = [group_b]
-    group = commute_group(group_a, group_b)
+    if isinstance(group_a, TransInvSum):
+        if isinstance(group_b, TransInvSum):
+            group = commute_group_inv(group_a, group_b)
+        else:
+            if not isinstance(group_b. list):
+                group_b = [group_b]
+            group = commute_group_semi_inv(group_a, group_b, sign =-1)
+    elif isinstance(group_b, TransInvSum):
+        if not isinstance(group_a, list):
+                group_a = [group_a]
+        group = commute_group_semi_inv(group_a, group_b, sign =1)
+    else:
+        if not isinstance(group_a, list):
+                group_a = [group_a]
+        if not isinstance(group_b. list):
+                group_b = [group_b]
+        group = commute_group(group_a, group_b)
     return simplify_group(group)
 
 def commute_with_perturbing_H(Hpert, group, split_orders):
