@@ -55,13 +55,13 @@ class Ncproduct:
         else:
             self.product = [product]
 
-    def __getitem__(self, ind):
-        return Ncproduct(self.scalar, self.product[ind])
+    def get_operator(self, ind):
+        return type(self)(self.scalar, self.product[ind])
 
     def get_unit(self, ind):
-        return Ncproduct(1, self.product[ind])
+        return type(self)(1, self.product[ind])
 
-    def get_operator(self,ind):
+    def __getitem__(self, ind):
         return self.product[ind]
 
     def __setitem__(self, ind, value):
@@ -102,16 +102,18 @@ class Ncproduct:
             return other+[self*(-1)]
 
     def __mul__(self, other):
-        if isinstance(other, Ncproduct):
-            return Ncproduct(self.scalar*other.scalar, self.product+other.product)
+        typ = type(self)
+        if isinstance(other, typ):
+            return typ(self.scalar*other.scalar, self.product+other.product)
         else:
-            return Ncproduct(self.scalar*other, self.product)
+            return typ(self.scalar*other, self.product)
 
     def __rmul__(self, other):
-        if isinstance(other, Ncproduct):
-            return Ncproduct(self.scalar*other.scalar, other.product+self.product)
+        typ = type(self)
+        if isinstance(other, typ):
+            return typ(self.scalar*other.scalar, other.product+self.product)
         else:
-            return Ncproduct(self.scalar*other, self.product)
+            return typ(self.scalar*other, self.product)
 
     def __repr__(self):
         return str(self.scalar) + ' : ' +str(self.product)
@@ -124,7 +126,7 @@ class Ncproduct:
             return False
 
     def conjugate(self):
-        return Ncproduct(sympy.conjugate(self.scalar)*(2-len(self.product)%4), self.product)
+        return type(self)(sympy.conjugate(self.scalar)*(2-len(self.product)%4), self.product)
 
     def __len__(self):
         return len(self.product)
@@ -147,9 +149,9 @@ class Ncproduct:
                 return 'a_' + str((a+1)//2)
         else:
             if a % 2 == 0:
-                return 'b_{'+init_string+'+' + str(a//2 - 1)+'}'
+                return 'b_{'+init_string + ('+'+str(a//2 - 1) if a is not 2 else '') +'}'
             else:
-                return 'a_{'+init_string+'+'+ str((a+1)//2 - 1)+'}'
+                return 'a_{'+init_string+('+'+ str((a+1)//2 - 1) if a is not 1 else '')+'}'
 
     def destringify(self, string):
         result = []
@@ -219,9 +221,9 @@ class SigmaProduct(Ncproduct):
                 return '\\sigma^z_{' + str((a+1)//2)+'}'
         else:
             if a % 2 == 0:
-                return '\\sigma^x_{' +init_string+'+'  + str(a//2 -1)+'}'
+                return '\\sigma^x_{' +init_string + ('+'+str(a//2 -1) if a is not 2 else '')+'}'
             else:
-                return '\\sigma^z_{' +init_string+'+' + str((a+1)//2 -1)+'}'
+                return '\\sigma^z_{' +init_string + ('+'+str((a+1)//2 -1) if a is not 1 else '')+'}'
 
     def destringify(self, string):
         result = []
@@ -301,14 +303,65 @@ def collect_terms(group):
     D = defaultdict(list)
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].append(i)
-    return [Ncproduct(sympy.expand(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
+    return type(group)(type(group[0])(
+        sympy.expand(sum([group[i].scalar for i in D[key]])), list(key))
+                       for key in D)
 
 def full_collect_terms(group):
     from collections import defaultdict
     D = defaultdict(list)
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].append(i)
-    return [Ncproduct(sympy.simplify(sum([group[i].scalar for i in D[key]])), list(key)) for key in D]
+    return type(group)(type(group[0])(
+        sympy.simplify(sum([group[i].scalar for i in D[key]])), list(key))
+                       for key in D)
+
+def mathematica_simplify(scalar, use_tempfile = False):
+    sstr = mstr(scalar)
+    parameter = ('ToString['
+                 'Simplify[' + sstr +']'
+                 ', InputForm]')
+    simpstring = "Not set."
+    if use_tempfile:
+        script_file = tempfile.NamedTemporaryFile(mode = 'wt', delete=False)
+        script_file.write("Print["+parameter+"]")
+        script_file.close()
+        simpstring = check_output([command, '-script', script_file.name])[0:-1].decode("utf-8")
+        os.remove(script_file.name)
+    else:
+        simpstring = check_output([qcommand,parameter])[0:-1].decode("utf-8")
+    try:
+        return mathematica_parser(simpstring)
+    except Exception as e:
+        print(str(e))
+        print(simpstring)
+
+def mathematica_series(scalar, varlist, order):
+    definition = """multiTaylor[f_, {vars_?VectorQ, pt_?VectorQ, n_Integer?NonNegative}] :=
+Sum[Nest[(vars - pt).# &, (D[f, {vars, \[FormalK]}] /.
+Thread[vars -> pt]), \[FormalK]]/\[FormalK]!, {\[FormalK], 0,
+n}, Method -> "Procedural"]""".replace('\n','')
+    sstr = mstr(scalar)
+    varsstr = ('{'
+               +'{'+','.join([str(var) for var in varlist])+'},'
+               +'{'+','.join([str(0)]*len(varlist))+'},'
+               + str(order+1)+'}')
+    parameter = (definition+';ToString[' +
+                 'Expand[multiTaylor['+
+                 sstr+
+                 ',' +varsstr+']]'
+                 ', InputForm]')
+    simpstring = check_output([qcommand,parameter])[0:-1].decode("utf-8")
+    return mathematica_parser(simpstring)
+
+def math_collect_terms(group):
+    from collections import defaultdict
+    D = defaultdict(list)
+    for i,ncprod in enumerate(group):
+        D[tuple(ncprod.product)].append(i)
+    return type(group)(type(group[0])(
+        mathematica_simplify(sum([group[i].scalar for i in D[key]])), list(key))
+                       for key in D)
 
 class TransInvSum:
     """Can be either Ncproduct or SigmaProduct, despite code names"""
@@ -332,8 +385,8 @@ class TransInvSum:
         """Assumes products are ordered."""
         for ncprod in self.ncprods:
             if ncprod[0] is not 1 and ncprod[0] is not 2:
-                diff = ncprod[0]-(ncprod[0] % 2) + 2
-                ncprod[:] = [el - diff for el in ncprod]
+                ind_diff = ((ncprod[0]+1)//2) - 1
+                ncprod[:] = [el - 2*ind_diff for el in ncprod]
 
     def __add__(self, other):
         """Adds translational inv. intelligently, otherwise assumes
@@ -389,9 +442,9 @@ class TransInvSum:
     def __str__(self):
         return ('\n'.join([str(ncprod) for ncprod in self.ncprods]))
 
-    def texify(self, orders):
+    def texify(self, orders=None):
         return('\\begin{align*}\n \\sum_j '
-               +'\\\\\n'.join('&' + a.texify('j').replace('\\\\','\\')
+               +'\\\\\n'.join(' &' + a.texify('j').replace('\\\\','\\')
                               for a in self.ncprods)+'\n\\end{align*}')
     def convert(self):
         newncprods = []
@@ -401,7 +454,7 @@ class TransInvSum:
                     raise ValueError("Non-even number of Majorana fermions"
                                      "will lead to trailing strings in spin basis,"
                                      "which is not supported by convert.")
-                newncprods.append(convert_to_sigma(self.ncprod[i]))
+                newncprods.append(convert_to_sigma(ncprod))
             return TransInvSum(newncprods, check_base = True)
         elif isinstance(self.ncprods[0], SigmaProduct):
             for ncprod in self.ncprods:
@@ -425,8 +478,6 @@ class TransInvSum:
         remove_zeros(self.ncprods)
         return self
 
-
-
 def convert_group(group):
     if isinstance(group, TransInvSum):
         return group.convert()
@@ -439,53 +490,10 @@ def convert_group(group):
     else:
         raise ValueError('Unrecognised conversion asked for!')
 
-
-def mathematica_simplify(scalar, use_tempfile = False):
-    sstr = mstr(scalar)
-    parameter = ('ToString['
-                 'Simplify[' + sstr +']'
-                 ', InputForm]')
-    simpstring = "Not set."
-    if use_tempfile:
-        script_file = tempfile.NamedTemporaryFile(mode = 'wt', delete=False)
-        script_file.write("Print["+parameter+"]")
-        script_file.close()
-        simpstring = check_output([command, '-script', script_file.name])[0:-1].decode("utf-8")
-        os.remove(script_file.name)
-    else:
-        simpstring = check_output([qcommand,parameter])[0:-1].decode("utf-8")
-    try:
-        return mathematica_parser(simpstring)
-    except Exception as e:
-        print(str(e))
-        print(simpstring)
-
-def mathematica_series(scalar, varlist, order):
-    definition = """multiTaylor[f_, {vars_?VectorQ, pt_?VectorQ, n_Integer?NonNegative}] :=
-Sum[Nest[(vars - pt).# &, (D[f, {vars, \[FormalK]}] /.
-Thread[vars -> pt]), \[FormalK]]/\[FormalK]!, {\[FormalK], 0,
-n}, Method -> "Procedural"]""".replace('\n','')
-    sstr = mstr(scalar)
-    varsstr = ('{'
-               +'{'+','.join([str(var) for var in varlist])+'},'
-               +'{'+','.join([str(0)]*len(varlist))+'},'
-               + str(order+1)+'}')
-    parameter = (definition+';ToString[' +
-                 'Expand[multiTaylor['+
-                 sstr+
-                 ',' +varsstr+']]'
-                 ', InputForm]')
-    simpstring = check_output([qcommand,parameter])[0:-1].decode("utf-8")
-    return mathematica_parser(simpstring)
-
-def math_collect_terms(group, use_tempfile = False):
-    from collections import defaultdict
-    D = defaultdict(list)
-    for i,ncprod in enumerate(group):
-        D[tuple(ncprod.product)].append(i)
-    return [Ncproduct(mathematica_simplify(sum([group[i].scalar for i in D[key]]), use_tempfile), list(key)) for key in D]
-
 def mathematica_simplify_group(group, use_tempfile = False):
+    if isinstance(group, TransInvSum):
+        print("Mathematica simplify not supported for TransInv.")
+        return group.simplify()
     remove_zeros(group)
     for ncprod in group:
         ncprod.sort()
@@ -506,6 +514,9 @@ def simplify_group(group):
     return group
 
 def full_simplify_group(group):
+    if isinstance(group, TransInvSum):
+        print("Full simplify not supported for TransInv.")
+        return group.simplify()
     remove_zeros(group)
     for ncprod in group:
         ncprod.sort()
@@ -581,7 +592,7 @@ def commute_group(group_a, group_b):
         for b in group_b:
             if not (a.is_identity() or b.is_identity()):
                 result.append(a.commute(b))
-    return TransInvSum(result)
+    return result
 
 def commute_group_semi_inv(group_a, sumB, sign = 1):
     result = []
@@ -589,10 +600,11 @@ def commute_group_semi_inv(group_a, sumB, sign = 1):
     for a in group_a:
         for b in sumB:
             if not (a.is_identity() or b.is_identity()):
-                maxB = (b+1)//2
-                start_a = (a+1)//2
-                for j in range(start_a-maxB, max_ind):
-                    result.append(a.commute(prodtype(sign*b.scalar, [el+j*2+a[0] for el in b])))
+                maxB = (b[-1]+1)//2
+                start_a = (a[0]+1)//2
+                max_a = (a[-1]+1)//2
+                for j in range(start_a-maxB, max_a):
+                    result.append(a.commute(prodtype(sign*b.scalar, [el+j*2 for el in b])))
     return result
 
 def commute_group_inv(sumA, sumB):
@@ -601,19 +613,17 @@ def commute_group_inv(sumA, sumB):
     for a in sumA:
         for b in sumB:
             if not (a.is_identity() or b.is_identity()):
-                maxA = (a+1)//2
-                maxB = (b+1)//2
+                maxA = (a[-1]+1)//2
+                maxB = (b[-1]+1)//2
                 if maxA <= maxB:
                     fixed = prodtype(b.scalar, [el+2*(maxA-1) for el in b])
                     sign = 1
                     var = a
-                    max_ind = maxB
                 if maxA > maxB:
                     fixed = prodtype(a.scalar, [el+2*(maxB-1) for el in a])
                     sign = -1
                     var = b
-                    max_ind = maxA
-                for j in range(max_ind):
+                for j in range(maxA+maxB-1):
                     result.append(prodtype(sign*var.scalar, [el+j*2 for el in var]).commute(fixed))
     return TransInvSum(result)
 
@@ -738,6 +748,8 @@ def texify_group(group, newlines = False):
                 return('\\begin{align*}\n'+'\\\\\n'.join('&' + a.texify().replace('\\\\','\\') for a in group)+'\n\\end{align*}')
         else:
             return('$$'+group[0].texify().replace('\\\\','\\')+'$$')
+    else if isinstance(group, TransInvSum):
+        return group.texify(print_group.orders)
     else:
         return('$$'+group.texify().replace('\\\\','\\')+'$$')
 
@@ -791,18 +803,18 @@ def load_group(filename, iofvars = None, split_orders = None, normdict = None):
     return parsed['group']
 
 def substitute_group(group, subs_rules, split_orders = None):
-    temp = [Ncproduct(sympify(ncprod.scalar).xreplace(subs_rules),
+    temp = [type(group[0])(sympify(ncprod.scalar).xreplace(subs_rules),
                      ncprod.product) for ncprod in group]
     remove_zeros(temp)
     if split_orders is not None:
         split_orders[-1] = len(temp)
-    return temp
+    return type(group)(temp)
 
 
 def fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart):
     row_to_fill = matrixrows[subspace[tuple(to_cancel.product)]]
     if not row_to_fill:
-        comm = calculate_commutator(Jpart, Ncproduct(1,to_cancel.product))
+        comm = calculate_commutator(Jpart, to_cancel.get_unit())
         row_to_fill[:] = [0]*len(subspace)
         for ncprod in comm:
            try:
@@ -836,16 +848,16 @@ def build_vector_to_cancel(to_cancel, subspace):
         cvector[subspace[tuple(ncprod.product)]] = ncprod.scalar
     return cvector
 
-def print_subspace(subspace):
+def print_subspace(subspace, typ = Ncproduct):
     for key, item in subspace.items():
-        print(str(item)+ ': ' + ' '.join([Ncproduct.stringify(Ncproduct,a) for a in key]))
+        print(str(item)+ ': ' + ' '.join([typ.stringify(typ,a) for a in key]))
 
 def sparse_fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart, ind_col):
         ind_cols = [ind_col]
         to_cancels = [to_cancel]
         count = 0
         while count < len(ind_cols):
-            comm = calculate_commutator(Jpart, Ncproduct(1,to_cancels[count].product))
+            comm = calculate_commutator(Jpart, to_cancels[count].get_unit())
             for ncprod in comm:
                 try:
                     ind_row = subspace[tuple(ncprod.product)]
@@ -887,7 +899,7 @@ def sparse_normalise(psi_total, order, orders, coeffs, cvector, matrixrows, spli
                 row.append((ind_col, product))
         const_term = term.as_coeff_add(*coeffs)[0]
         cvector.append(-const_term)
-        subspace.append(Ncproduct(-const_term, ncprod.product))
+        subspace.append(type(ncprod)(-const_term, ncprod.product))
         ind+=1
 
 def merge(lsts):
@@ -972,7 +984,8 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
                                     fvarname = 'A', iofvars = None, subs_rules = None, split_orders = None):
     fvar_gen = sympy.numbered_symbols('fvar')
     fvars = [next(fvar_gen) for i in range(len(subspace))]
-    psi_order = [Ncproduct(-fvars[subspace[key]], list(key))
+    typ = type(subspace[0])
+    psi_order = [typ(-fvars[subspace[key]], list(key))
                  for i,key in enumerate(subspace)]
     if norm:
         psi_total = psi_lower + psi_order
@@ -1009,10 +1022,10 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
         if iofvars is not None:
             iofvars[:] = newfvars
     if not subs_rules:
-        return simplify_group([Ncproduct(-solvector[i], list(key))
+        return simplify_group([typ(-solvector[i], list(key))
                            for i,key in enumerate(subspace)])
     else:
-        ret = simplify_group([Ncproduct(-solvector[i].xreplace(subs_rules), list(key))
+        ret = simplify_group([typ(-solvector[i].xreplace(subs_rules), list(key))
                                for i,key in enumerate(subspace)])
         for tempvar in tempvars:
             subs_rules.pop(tempvar, None)
@@ -1408,7 +1421,7 @@ def accel_asc(n):
 
 
 def unitary_transform(to_trans, Gs, max_order, inverse = False):
-    """Unitary transform of form U = e^i(Gs[0]+Gs[1]+1]+...)"""
+    """Unitary transform of form U = e^i(Gs[0]+Gs[1]+Gs[2]+...)"""
     result = to_trans[:]
     for torder in range(1,max_order+1):
         for orderset in accel_asc(torder):
@@ -1420,7 +1433,7 @@ def unitary_transform(to_trans, Gs, max_order, inverse = False):
             while True:
                 cumul = to_trans[:]
                 for order in orderset:
-                    cumul = commute_group(cumul, Gs[order-1])
+                    cumul = calculate_commutator(cumul, Gs[order-1])
                 result += premultiply(taylorscalar,cumul)
                 if not next_permutationS(orderset):
                     break
@@ -1429,7 +1442,7 @@ def unitary_transform(to_trans, Gs, max_order, inverse = False):
 def unitary_transform_to_order(to_trans, Gs, torder,
                                not_single_comm = False,
                                inverse = False):
-    """Unitary transform of form U = e^i(Gs[0]+Gs[1]+1]+...)
+    """Unitary transform of form U = e^i(Gs[0]+Gs[1]+Gs[2]+...)
     at order torder. Assumes to_trans is zeroth order.
     """
     if torder == 0:
@@ -1445,14 +1458,14 @@ def unitary_transform_to_order(to_trans, Gs, torder,
             while True:
                 cumul = to_trans[:]
                 for order in orderset:
-                    cumul = commute_group(cumul, Gs[order-1])
+                    cumul = calculate_commutator(cumul, Gs[order-1])
                 result += premultiply(taylorscalar,cumul)
                 if not next_permutationS(orderset):
                     break
     return simplify_group(result)
 
 def exponentiate_to_order(Gs, torder, inverse = False):
-    """Calculate U = e^i(Gs[0]+Gs[1]+1]+...)"""
+    """Calculate U = e^i(Gs[0]+Gs[1]+Gs[2]+...)"""
     if torder == 0:
         return [Ncproduct(1,[])]
     result = []
@@ -1462,13 +1475,13 @@ def exponentiate_to_order(Gs, torder, inverse = False):
             taylorscalar = ((-I)**numcomms)/factorial(numcomms)
         else:
             taylorscalar = (I**numcomms)/factorial(numcomms)
-            while True:
-                cumul = [1]
-                for order in orderset:
-                    cumul = multiply_groups(cumul, Gs[order-1])
-                result += premultiply(taylorscalar,cumul)
-                if not next_permutationS(orderset):
-                    break
+        while True:
+            cumul = [1]
+            for order in orderset:
+                cumul = multiply_groups(cumul, Gs[order-1])
+            result += premultiply(taylorscalar,cumul)
+            if not next_permutationS(orderset):
+                break
     return simplify_group(result)
 
 def trace_inner_product(group_a, group_b):
