@@ -58,8 +58,8 @@ class Ncproduct:
     def get_operator(self, ind):
         return type(self)(self.scalar, self.product[ind])
 
-    def get_unit(self, ind):
-        return type(self)(1, self.product[ind])
+    def get_unit(self):
+        return type(self)(1, self.product)
 
     def __getitem__(self, ind):
         return self.product[ind]
@@ -249,10 +249,10 @@ class SigmaProduct(Ncproduct):
 
 
 def postmultiply(group,a):
-     return [b*a for b in group]
+     return type(group)([b*a for b in group])
 
 def premultiply(a, group):
-    return [a*b for b in group]
+    return type(group)([a*b for b in group])
 
 def remove_zeros(group):
     group[:] = (a for a in group if a.scalar != 0)
@@ -372,11 +372,15 @@ class TransInvSum:
         """If width is given, you are vouching the sum is correct,
         check_base will be effectively False.
         """
-        if not isinstance(ncprods_list, list):
-            ncprods_list = [ncprods_list]
-        self.ncprods = ncprods_list
-        if check_base:
-            self.rebase()
+        if isinstance(ncprods_list, TransInvSum):
+            #Copy constructor
+            self.ncprods = ncprods_list.ncprods[:]
+        else:
+            if isinstance(ncprods_list, Ncproduct) or isinstance(ncprods_list, SigmaProduct):
+                ncprods_list = [ncprods_list]
+            self.ncprods = ncprods_list
+            if check_base:
+                self.rebase()
 
     def get_width(self):
         return max((ncprod.product[-1] for ncprod in self.ncprods))
@@ -425,10 +429,10 @@ class TransInvSum:
             return TransInvSum(other, check_base=True)+(-1)*self
 
     def __rmul__(self, other):
-        return TransInvSum([other*ncprod for ncprod in self.ncprods], self.width)
+        return TransInvSum([other*ncprod for ncprod in self.ncprods])
 
     def __mul__(self, other):
-        return TransInvSum([ncprod*other for ncprod in self.ncprods], self.width)
+        return TransInvSum([ncprod*other for ncprod in self.ncprods])
 
     def __repr__(self):
         return '\n'.join(repr(ncprod) for ncprod in self.ncprods)
@@ -450,7 +454,7 @@ class TransInvSum:
         newncprods = []
         if isinstance(self.ncprods[0], Ncproduct):
             for ncprod in self.ncprods:
-                if len(ncprods) % 2 != 0:
+                if len(ncprod.product) % 2 != 0:
                     raise ValueError("Non-even number of Majorana fermions"
                                      "will lead to trailing strings in spin basis,"
                                      "which is not supported by convert.")
@@ -641,11 +645,13 @@ def commute_up_to_order(group_a, group_b, order, split_orders_a, split_orders_b)
     return result
 
 def calculate_commutator(group_a,group_b):
+    if len(group_a) == 0 or len(group_b) == 0:
+        return type(group_a)([])
     if isinstance(group_a, TransInvSum):
         if isinstance(group_b, TransInvSum):
             group = commute_group_inv(group_a, group_b)
         else:
-            if not isinstance(group_b. list):
+            if not isinstance(group_b, list):
                 group_b = [group_b]
             group = commute_group_semi_inv(group_a, group_b, sign =-1)
     elif isinstance(group_b, TransInvSum):
@@ -655,7 +661,7 @@ def calculate_commutator(group_a,group_b):
     else:
         if not isinstance(group_a, list):
                 group_a = [group_a]
-        if not isinstance(group_b. list):
+        if not isinstance(group_b, list):
                 group_b = [group_b]
         group = commute_group(group_a, group_b)
     return simplify_group(group)
@@ -748,7 +754,7 @@ def texify_group(group, newlines = False):
                 return('\\begin{align*}\n'+'\\\\\n'.join('&' + a.texify().replace('\\\\','\\') for a in group)+'\n\\end{align*}')
         else:
             return('$$'+group[0].texify().replace('\\\\','\\')+'$$')
-    else if isinstance(group, TransInvSum):
+    elif isinstance(group, TransInvSum):
         return group.texify(print_group.orders)
     else:
         return('$$'+group.texify().replace('\\\\','\\')+'$$')
@@ -883,6 +889,40 @@ def sparse_find_subspace(to_cancel, Jpart):
         print_progress(i, length)
     return subspace, matrixrows
 
+
+def sparse_fill_subspace_rows_double_comm(to_cancel, matrixrows, subspace, Jpart, ind_col):
+        ind_cols = [ind_col]
+        to_cancels = [to_cancel]
+        count = 0
+        while count < len(ind_cols):
+            comm = calculate_commutator(Jpart, calculate_commutator(I*Jpart, TransInvSum(to_cancels[count].get_unit())))
+            for ncprod in comm:
+                try:
+                    ind_row = subspace[tuple(ncprod.product)]
+                except KeyError:
+                    ind_row = len(subspace)
+                    subspace[tuple(ncprod.product)] = ind_row
+                    matrixrows[ind_row] = []
+                    ind_cols.append(ind_row)
+                    to_cancels.append(ncprod)
+                matrixrows[ind_row].append((ind_cols[count], ncprod.scalar))
+            count+=1
+
+def sparse_find_subspace_double_comm(to_cancel, Jpart):
+    subspace = OrderedDict()
+    matrixrows = {}
+    length = len(to_cancel)
+    for i, ncprod in enumerate(to_cancel):
+        if not tuple(ncprod.product) in subspace:
+            ind = len(subspace)
+            subspace[tuple(ncprod.product)] = ind
+            matrixrows[ind] = []
+            sparse_fill_subspace_rows_double_comm(ncprod, matrixrows, subspace, Jpart, ind)
+        print_progress(i, length)
+    return subspace, matrixrows
+
+
+
 def sparse_normalise(psi_total, order, orders, coeffs, cvector, matrixrows, split_orders, start_ind = 0, subspace = None):
     if subspace is None:
         subspace = []
@@ -980,14 +1020,13 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space,
 
 
 def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
-                                    matrixrows, subspace, norm = False,
+                                    matrixrows, subspace, typ = Ncproduct, group_type = list, norm = False,
                                     fvarname = 'A', iofvars = None, subs_rules = None, split_orders = None):
     fvar_gen = sympy.numbered_symbols('fvar')
     fvars = [next(fvar_gen) for i in range(len(subspace))]
-    typ = type(subspace[0])
-    psi_order = [typ(-fvars[subspace[key]], list(key))
-                 for i,key in enumerate(subspace)]
     if norm:
+        psi_order = [typ(-fvars[subspace[key]], list(key))
+                 for i,key in enumerate(subspace)]
         psi_total = psi_lower + psi_order
         new_orders = orders.copy()
         new_orders.update(dict(zip(fvars, [order]*len(fvars))))
@@ -1022,11 +1061,11 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
         if iofvars is not None:
             iofvars[:] = newfvars
     if not subs_rules:
-        return simplify_group([typ(-solvector[i], list(key))
-                           for i,key in enumerate(subspace)])
+        return simplify_group(group_type([typ(-solvector[i], list(key))
+                                          for i,key in enumerate(subspace)]))
     else:
-        ret = simplify_group([typ(-solvector[i].xreplace(subs_rules), list(key))
-                               for i,key in enumerate(subspace)])
+        ret = simplify_group(group_type([typ(-solvector[i].xreplace(subs_rules), list(key))
+                                         for i,key in enumerate(subspace)]))
         for tempvar in tempvars:
             subs_rules.pop(tempvar, None)
         return ret
@@ -1422,7 +1461,8 @@ def accel_asc(n):
 
 def unitary_transform(to_trans, Gs, max_order, inverse = False):
     """Unitary transform of form U = e^i(Gs[0]+Gs[1]+Gs[2]+...)"""
-    result = to_trans[:]
+    group_type = type(to_trans)
+    result = group_type(to_trans)
     for torder in range(1,max_order+1):
         for orderset in accel_asc(torder):
             numcomms = len(orderset)
@@ -1431,7 +1471,7 @@ def unitary_transform(to_trans, Gs, max_order, inverse = False):
             else:
                 taylorscalar = (I**numcomms)/factorial(numcomms)
             while True:
-                cumul = to_trans[:]
+                cumul = group_type(to_trans)
                 for order in orderset:
                     cumul = calculate_commutator(cumul, Gs[order-1])
                 result += premultiply(taylorscalar,cumul)
@@ -1445,9 +1485,10 @@ def unitary_transform_to_order(to_trans, Gs, torder,
     """Unitary transform of form U = e^i(Gs[0]+Gs[1]+Gs[2]+...)
     at order torder. Assumes to_trans is zeroth order.
     """
+    group_type = type(to_trans)
     if torder == 0:
-        return to_trans[:]
-    result = []
+        return group_type(to_trans)
+    result =  group_type([])
     for orderset in accel_asc(torder):
         numcomms = len(orderset)
         if numcomms != 1 or not not_single_comm:
@@ -1456,7 +1497,7 @@ def unitary_transform_to_order(to_trans, Gs, torder,
             else:
                 taylorscalar = (I**numcomms)/factorial(numcomms)
             while True:
-                cumul = to_trans[:]
+                cumul = group_type(to_trans)
                 for order in orderset:
                     cumul = calculate_commutator(cumul, Gs[order-1])
                 result += premultiply(taylorscalar,cumul)
@@ -1503,3 +1544,6 @@ def trace_inner_product(group_a, group_b):
         result += (group_a[i].scalar
                    *(2-length%4)*group_b[j].scalar)
     return result
+
+def zero_free_vars(group, fvars):
+    return substitute_group(group, dict(zip(fvars, [0]*len(fvars))))
