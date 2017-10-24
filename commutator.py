@@ -17,6 +17,17 @@ from matlab_printer import matlabstr
 import shutil
 from choose_linear_solve import linear_solve
 
+class ind_converter:
+    def __init__(self, row, col):
+        self.row = row
+        self.col = col
+    def get_ind(self, x, y):
+        return x*col + y
+    def get_xy(self, ind):
+        y = ind % col
+        x = (ind - y)/col
+        return x, y
+
 
 command='/home/kempj/bin/MathematicaScript'
 qcommand = '/home/kempj/bin/runMath'
