@@ -6,6 +6,7 @@ import ipdb
 import json
 import yaml
 from collections import OrderedDict, defaultdict
+from itertools import chain, combinations
 import sympy
 import re
 from subprocess import check_output
@@ -31,6 +32,11 @@ class ind_converter:
 
 command='/home/kempj/bin/MathematicaScript'
 qcommand = '/home/kempj/bin/runMath'
+
+def powerset(iterable):
+    """From https://stackoverflow.com/questions/464864/how-to-get-all-possible-combinations-of-a-list-s-elements"""
+    s = list(iterable)  # allows duplicate elements
+    return chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
 
 def multiple_replace(string, rep_dict):
     pattern = re.compile("|".join([re.escape(k) for k in rep_dict.keys()]), re.M)
@@ -62,7 +68,8 @@ class Ncproduct:
         if isinstance(product, list):
             self.product = product
         elif isinstance(product, str):
-            self.product = self.destringify(product)
+            self.product, scalar = self.destringify(product)
+            self.scalar = self.scalar * scalar
         else:
             self.product = [product]
 
@@ -143,16 +150,22 @@ class Ncproduct:
         return len(self.product)
 
     def __str__(self):
-        return '\u22c5'.join([str(self.scalar).replace('**','^').replace('*','\u22c5').replace('I','i')]
-                       +[self.stringify(a) for a in self.product])
+        strings, scalar = self.self_stringify()
+        return '\u202f'.join([str(self.scalar*scalar).replace('**','^').replace('*','\u202f').replace('I','i')]
+                             + strings)
 
-    def stringify(self, a):
+    @staticmethod
+    def stringify(a):
         if a % 2 == 0:
             return 'b' + str(a//2)
         else:
             return 'a' + str((a+1)//2)
 
-    def _texify_stringify(self, a, init_string = None):
+    def self_stringify(self):
+        return [self.stringify(a) for a in self.product], 1
+
+    @staticmethod
+    def _texify_stringify(a, init_string = None):
         if init_string is None:
             if a % 2 == 0:
                 return 'b_' + str(a//2)
@@ -164,7 +177,8 @@ class Ncproduct:
             else:
                 return 'a_{'+init_string+('+'+ str((a+1)//2 - 1) if a is not 1 else '')+'}'
 
-    def destringify(self, string):
+    @staticmethod
+    def destringify(string):
         result = []
         if len(string) > 0:
             string = string.replace('\u22c5', ' ')
@@ -175,9 +189,9 @@ class Ncproduct:
                     result.append(int(op[1:])*2)
                 else:
                     print('Unknown operator ' + op)
-            return result
+            return result, 1
         else:
-            return []
+            return [], 1
 
     def texify(self, init_string = None):
         tex = sympy.latex(self.scalar)
@@ -218,13 +232,35 @@ def sort_pauli_list(a):
 
 
 class SigmaProduct(Ncproduct):
-    def stringify(self, a):
+
+    @staticmethod
+    def stringify(a):
         if a % 2 == 0:
             return 'x' + str(a//2)
         else:
             return 'z' + str((a+1)//2)
 
-    def _texify_stringify(self, a, init_string = None):
+    def self_stringify(self):
+        "If product is not sorted, may not perform all y conversions."
+        strings = []
+        scalar = 1
+        i = 0
+        while i  < len(self):
+            a = self.product[i]
+            a2 = self.product[i+1] if i != len(self) -1 else None
+            if a % 2 == 0:
+                strings.append('x' + str(a//2))
+            elif a2 == a + 1:
+                strings.append('y' + str((a+1)//2))
+                scalar = scalar * I
+                i = i + 1
+            else:
+                strings.append('z' + str((a+1)//2))
+            i = i +1
+        return strings, scalar
+
+    @staticmethod
+    def _texify_stringify(a, init_string = None):
         if init_string is None:
             if a % 2 == 0:
                 return '\\sigma^x_{' + str(a//2)+'}'
@@ -236,17 +272,23 @@ class SigmaProduct(Ncproduct):
             else:
                 return '\\sigma^z_{' +init_string + ('+'+str((a+1)//2 -1) if a is not 1 else '')+'}'
 
-    def destringify(self, string):
+    @staticmethod
+    def destringify(string):
         result = []
         string = string.replace('\u22c5', ' ')
+        scalar = 1
         for op in string.split(' '):
             if op[0] == 'z':
                 result.append(int(op[1:])*2-1)
             elif op[0] == 'x':
                 result.append(int(op[1:])*2)
+            elif op[0] == 'y':
+                result.append(int(op[1:])*2-1)
+                result.append(int(op[1:])*2)
+                scalar = scalar * (-I)
             else:
                 print('Unknown operator ' + op)
-        return result
+        return result, scalar
 
     def sort(self):
         self.scalar *= sort_pauli_list(self.product)
@@ -492,6 +534,25 @@ class TransInvSum:
         self.ncprods = collect_terms(self.ncprods)
         remove_zeros(self.ncprods)
         return self
+
+def get_lattice_index(a):
+    return (a+1)//2
+
+def get_lattice_distance(a1,a2, L_periodic = None):
+    if a1 ==a2:
+        return 0
+    n1 = get_lattice_index(a1)
+    n2 = get_lattice_index(a2)
+    n1, n2 = (n1, n2) if n1 < n2 else (n2, n1)
+    return n2-n1 if not L_periodic else min([n2-n1, n1+L_periodic-n2])
+
+def get_lattice_distance_only_wrapped(a1,a2, L_periodic):
+    if a1 == a2:
+        return 0
+    n1 = get_lattice_index(a1)
+    n2 = get_lattice_index(a2)
+    n1, n2 = (n1, n2) if n1 < n2 else (n2, n1)
+    return n1+L_periodic-n2
 
 def convert_group(group):
     if isinstance(group, TransInvSum):
@@ -867,7 +928,7 @@ def build_vector_to_cancel(to_cancel, subspace):
 
 def print_subspace(subspace, typ = Ncproduct):
     for key, item in subspace.items():
-        print(str(item)+ ': ' + ' '.join([typ.stringify(typ,a) for a in key]))
+        print(str(item)+ ': ' + ' '.join([typ.stringify(a) for a in key]))
 
 def sparse_fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart, ind_col):
         ind_cols = [ind_col]
@@ -1032,7 +1093,8 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space,
 
 def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
                                     matrixrows, subspace, typ = Ncproduct, group_type = list, norm = False,
-                                    fvarname = 'A', iofvars = None, subs_rules = None, split_orders = None):
+                                    fvarname = 'A', iofvars = None, subs_rules = None, split_orders = None,
+                                    numeric_dict = None):
     fvar_gen = sympy.numbered_symbols('fvar')
     fvars = [next(fvar_gen) for i in range(len(subspace))]
     if norm:
@@ -1043,7 +1105,10 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
         new_orders.update(dict(zip(fvars, [order]*len(fvars))))
         sparse_normalise(psi_total, order, new_orders, fvars, cvector, matrixrows, split_orders, start_ind = len(fvars))
     sub_sub_spaces = find_sub_subspaces(matrixrows)
+    print("Subsubspaces: ")
     print(sub_sub_spaces)
+    print("Number: " + str(len(sub_sub_spaces)))
+    print("Lengths: " +str([len(ss) for ss in sub_sub_spaces]))
     solutions = {}
     if subs_rules is None:
         subs_rules = {}
@@ -1264,36 +1329,43 @@ def check_truncate(to_cancel, fvars):
         print_progress(i, length_ss)
     return solutions
 
-def _build_entire_subspace(result, former, start, end):
-    for i in range(start, end):
-        term = former + [i]
-        result[:] += [term]
-        _build_entire_subspace(result, term, i+1, end)
+def build_entire_subspace(L, typ = Ncproduct):
+    return [typ(1, sorted(list(el))) for el in powerset(range(1, L*2+1))]
 
-def build_entire_subspace(L):
-    start = 1
-    end = L*2
-    result = []
-    former = []
-    _build_entire_subspace(result, former, start, end)
-    return [Ncproduct(1, el) for el in result]
+def build_norm_subspace(L, typ = Ncproduct):
+    return [typ(1, sorted(list(el))) for el in powerset(range(2, L*2+1))]
 
-def build_norm_subspace(L):
-    start = 2
-    end = L*2
-    result = []
-    former = [1]
-    _build_entire_subspace(result, former, start, end)
-    return [Ncproduct(1, el) for el in result]
+def build_odd_subspace(L, typ = Ncproduct):
+    return [ncprod for ncprod in build_entire_subspace(L, typ = typ) if len(ncprod.product) % 2 == 1]
 
-def build_odd_subspace(L):
-    return [ncprod for ncprod in build_entire_subspace(L) if len(ncprod.product) % 2 == 1]
+def build_odd_norm_subspace(L, typ = Ncproduct):
+    return [ncprod for ncprod in build_norm_subspace(L, typ = typ) if len(ncprod.product) % 2 == 1]
 
-def build_odd_norm_subspace(L):
-    return [ncprod for ncprod in build_norm_subspace(L) if len(ncprod.product) % 2 == 1]
 
-def solve_at_once(H, L, iofvars = None):
-    subspace_ops = build_odd_subspace(L)
+
+def get_support(ncproduct, L_periodic = None):
+    product = ncproduct.product
+    product = sorted(product)
+    if len(product) < 2:
+        return len(product)
+    if not L_periodic:
+        return get_lattice_distance(product[0], product[-1])+1
+    site_indices = list(dict.fromkeys([(a+1)//2 for a in product]))
+    return 1 + min([L_periodic+site_indices[i]-site_indices[i+1]
+                   for i in range(len(site_indices)-1)]+
+                   [site_indices[-1]-site_indices[0]])
+
+
+def build_finite_support_subspace(L, L_supp, typ = Ncproduct, periodic = False):
+    return [ncprod for ncprod in build_entire_subspace(L, typ = typ)
+            if get_support(ncprod, L_periodic = L if periodic else None) <= L_supp]
+
+def solve_at_once(H, L, iofvars = None, entire = False):
+    group_type = type(H[0])
+    if entire:
+        subspace_ops = build_entire_subspace(L, typ = group_type)
+    else:
+        subspace_ops = build_odd_subspace(L, typ = group_type)
     len_subspace = len(subspace_ops)
     subspace = OrderedDict(zip([tuple(el.product) for el in subspace_ops],
                                 [i for i in range(len_subspace)]))
@@ -1309,14 +1381,15 @@ def solve_at_once(H, L, iofvars = None):
     if iofvars is None:
         iofvars = []
     return sparse_solve_for_commuting_term(cvector,
-                                       None,
-                                       None,
-                                       None,
-                                       matrixrows,
-                                       subspace,
-                                       norm = False,
-                                       fvarname = 'F',
-                                       iofvars=iofvars)
+                                           None,
+                                           None,
+                                           None,
+                                           matrixrows,
+                                           subspace,
+                                           norm = False,
+                                           fvarname = 'F',
+                                           iofvars=iofvars,
+                                           typ= group_type)
 
 def fill_subspace(Jpart, order):
     L = 2*order+1
@@ -1558,3 +1631,8 @@ def trace_inner_product(group_a, group_b):
 
 def zero_free_vars(group, fvars):
     return substitute_group(group, dict(zip(fvars, [0]*len(fvars))))
+
+def split_free_vars(group, fvars):
+    """Split up group into a list of groups, each with only one fvar not zero"""
+    zero_list = [0]*(len(fvars)-1)
+    return [substitute_group(group, dict(zip([fvar2 for fvar2 in fvars if fvar2 != fvar],zero_list))) for fvar in fvars]
