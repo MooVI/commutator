@@ -17,6 +17,8 @@ from mathematica_printer import mstr
 from matlab_printer import matlabstr
 import shutil
 from choose_linear_solve import linear_solve
+from choose_n_h_linear_solve import n_h_linear_solve
+h_linear_solve = linear_solve
 
 class ind_converter:
     def __init__(self, row, col):
@@ -1053,8 +1055,13 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector,
                 sparse_mat_rep[(row_count, sspacedict[el[0]])] = el[1]
             row_count += 1
     fvars = [coeffs[ind] for ind in sub_sub_space]
-    sols = linear_solve(sparse_mat_rep, sub_cvector, length, fvars,
-                        iofvars, fvargen, newfvars, mathematica_parser.vardict)
+    if homogeneous:
+        solver = n_h_linear_solve if numeric_dict else h_linear_solve
+    else:
+        solver = n_linear_solve if numeric_dict else linear_solve
+    argdict = numeric_dict if numeric_dict else mathematica_parser.vardict
+    sols = solver(sparse_mat_rep, sub_cvector, length, fvars,
+                        iofvars, fvargen, newfvars, argdict)
     if not sols:
         print(sparse_mat_rep)
         print(sub_cvector)
@@ -1090,7 +1097,9 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
     for i, ss_space in enumerate(sub_sub_spaces):
         solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
                                                 fvars, cvector, iofvars,
-                                                fvargen, newfvars))
+                                                fvargen, newfvars,
+                                                numeric_dict = numeric_dict,
+                                                homogeneous = homogeneous))
         print_progress(i, length_ss)
     solvector = []
     for fvar in fvars:
@@ -1319,7 +1328,7 @@ def build_finite_support_subspace(L, L_supp, typ = Ncproduct, periodic = False):
     return [ncprod for ncprod in build_entire_subspace(L, typ = typ)
             if get_support(ncprod, L_periodic = L if periodic else None) <= L_supp]
 
-def solve_at_once(H, L, iofvars = None, entire = False):
+def solve_at_once(H, L, iofvars = None, entire = False, numeric_dict = None):
     group_type = type(H[0])
     if entire:
         subspace_ops = build_entire_subspace(L, typ = group_type)
@@ -1346,9 +1355,11 @@ def solve_at_once(H, L, iofvars = None, entire = False):
                                            matrixrows,
                                            subspace,
                                            norm = False,
+                                           homogeneous = True,
                                            fvarname = 'F',
                                            iofvars=iofvars,
-                                           typ= group_type)
+                                           typ= group_type,
+                                           numeric_dict = numeric_dict)
 
 def fill_subspace(Jpart, order):
     L = 2*order+1
