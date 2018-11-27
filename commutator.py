@@ -29,7 +29,6 @@ class ind_converter:
         x = (ind - y)/col
         return x, y
 
-
 command='/home/kempj/bin/MathematicaScript'
 qcommand = '/home/kempj/bin/runMath'
 
