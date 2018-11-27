@@ -12,7 +12,8 @@ def mathematica_parser(exprstring):
 
 
 
-def linear_solve(sparse_mat_rep, sub_cvector, length, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars, vardict):
+def linear_solve(sparse_mat_rep, sub_cvector, length, fvars, iofvars,
+                 fvargen, newfvars, vardict):
     mathematica_parser.vardict = vardict
     if len(sparse_mat_rep) == 1:
         return {fvars[0]: sub_cvector[0]/sparse_mat_rep[(0,0)]}
@@ -56,13 +57,8 @@ def linear_solve(sparse_mat_rep, sub_cvector, length, fvars, iofvars, fvargen, n
         sepvecs = nullstring[1:-1].split('}, ')
         for nullvec in sepvecs:
             nullvec = nullvec[1:].split(',')
-            if False:#any(nullvecel != 0 #for nullvecel in nullvec[len(nullvec)-len_oldfvars:]):
-                newfvar = next(tempgen)
-                iofvars.append(newfvar)
-                tempvars.append(newfvar)
-            else:
-                newfvar = next(fvargen)
-                newfvars.append(newfvar)
+            newfvar = next(fvargen)
+            newfvars.append(newfvar)
             sols_list = [sol+newfvar*mathematica_parser(nullvecel)
                          for sol, nullvecel in zip(sols_list, nullvec)]
    #ipdb.set_trace()

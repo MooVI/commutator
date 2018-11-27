@@ -17,7 +17,7 @@ def matlab_parser(exprstring, matrix = False):
         return sympify('Matri'+exprstring[5:].replace('^','**').replace('i', '*I'), mathematica_parser.vardict)
     return sympify(exprstring.replace('^','**').replace('i', '*I'), mathematica_parser.vardict)
 
-def linear_solve(sparse_mat_rep, sub_cvector, length, fvars, iofvars, fvargen, newfvars, tempgen, tempvars, len_oldfvars, vardict):
+def linear_solve(sparse_mat_rep, sub_cvector, length, fvars, iofvars, fvargen, newfvars, vardict):
     mathematica_parser.vardict = vardict
     global eng
     MAX_TRYS = 2
@@ -95,14 +95,8 @@ def linear_solve(sparse_mat_rep, sub_cvector, length, fvars, iofvars, fvargen, n
         sepvecs = [matlab_parser(nullvecstr, matrix=True)
                            for nullvecstr in nullstring.split(';')[1:]]
         for nullvec in sepvecs:
-            if len_oldfvars > 0:
-                raise ValueError("Non empy iofvars not supported in Matlab!")
-                newfvar = next(tempgen)
-                iofvars.append(newfvar)
-                tempvars.append(newfvar)
-            else:
-                newfvar = next(fvargen)
-                newfvars.append(newfvar)
+            newfvar = next(fvargen)
+            newfvars.append(newfvar)
             sols_list = [sol+newfvar*nullvecel
                          for sol, nullvecel in zip(sols_list, nullvec)]
    #ipdb.set_trace()

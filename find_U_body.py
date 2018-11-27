@@ -13,7 +13,6 @@ for test_order in range(START_ORDER, END_ORDER+1):
     comm.print_subspace(subspace)
     cvector = comm.build_vector_to_cancel(Hcomm, subspace)
     del Hcomm
-    subs_rules = {}
     iofvars = []
     g_comm = comm.sparse_solve_for_commuting_term(cvector,
                                                     None,
@@ -21,12 +20,9 @@ for test_order in range(START_ORDER, END_ORDER+1):
                                                     orders,
                                                     matrixrows,
                                                     subspace,
-                                                    subs_rules = subs_rules,
                                                     iofvars = iofvars,
                                                     fvarname = 'F' + str(test_order) + '_')
 
-    for x in sorted(subs_rules.keys(), key = lambda x: int(str(x)[2+len(str(test_order)):])):
-        print(str(x)+': ' +str(subs_rules[x]))
     print('\n')
     #print(g_comm)
     comm.invert_sz1_G(g_comm, Gs, iofvars)

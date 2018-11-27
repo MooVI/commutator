@@ -1036,10 +1036,9 @@ def merge(lsts):
 def find_sub_subspaces(matrixrows):
     return [list(space) for space in merge([[el[0] for el in row] for rownum, row in matrixrows.items()])]
 
-def solve_for_sub_subspace(matrixrows, sub_sub_space,
-                           coeffs, cvector,
-                           iofvars, subs_rules,
-                           fvargen, newfvars, tempgen, tempvars):
+def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector,
+                           iofvars,fvargen, newfvars,
+                           numeric_dict = None, homogeneous = False):
     sspacedict = dict(zip(sub_sub_space, range(len(sub_sub_space))))
     length = len(sub_sub_space)
     sparse_mat_rep = OrderedDict()
@@ -1054,46 +1053,22 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space,
                 sparse_mat_rep[(row_count, sspacedict[el[0]])] = el[1]
             row_count += 1
     fvars = [coeffs[ind] for ind in sub_sub_space]
-    oldfvars = []
-    if iofvars:
-        raise ValueError("iofvars not empty not supported for sparse matrices")
-        atoms = augmatrix.atoms(sympy.Symbol)
-        for iofvar in subs_rules:
-            if iofvar in atoms:
-                augmatrix = augmatrix.xreplace({iofvar: subs_rules[iofvar]})
-        atoms = augmatrix.atoms(sympy.Symbol)
-        for iofvar in iofvars:
-            if iofvar not in subs_rules and iofvar in atoms:
-                fvars.append(iofvar)
-                oldfvars.append(iofvar)
-                augmatrix = augmatrix.col_insert(-1, sympy.zeros(augmatrix.rows,1))
-                for row_ind in range(len(augmatrix[:,0])):
-                    coeff_val = -sympy.expand(augmatrix[row_ind,-1]).coeff(iofvar)
-                    augmatrix[row_ind,-2] = coeff_val
-                    augmatrix[row_ind,-1] += coeff_val*iofvar
     sols = linear_solve(sparse_mat_rep, sub_cvector, length, fvars,
-                        iofvars, fvargen, newfvars, tempgen, tempvars,
-                        len(oldfvars), mathematica_parser.vardict)
+                        iofvars, fvargen, newfvars, mathematica_parser.vardict)
     if not sols:
         print(sparse_mat_rep)
         print(sub_cvector)
         print(fvars)
         print(rownumstore)
         print(iofvars)
-        print(subs_rules)
         raise ValueError("Failure. No solutions.")
-    for oldfvar in oldfvars:
-        if oldfvar in sols:
-            subs_rules.update({var: rule.xreplace({oldfvar: sols[oldfvar]})
-                          for var, rule in subs_rules.items()})
-            subs_rules[oldfvar] = sympy.simplify(sols[oldfvar])
     return sols
 
 
 def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
                                     matrixrows, subspace, typ = Ncproduct, group_type = list, norm = False,
                                     fvarname = 'A', iofvars = None, subs_rules = None, split_orders = None,
-                                    numeric_dict = None):
+                                    numeric_dict = None, homogeneous = False):
     fvar_gen = sympy.numbered_symbols('fvar')
     fvars = [next(fvar_gen) for i in range(len(subspace))]
     if norm:
@@ -1109,17 +1084,13 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
     print("Number: " + str(len(sub_sub_spaces)))
     print("Lengths: " +str([len(ss) for ss in sub_sub_spaces]))
     solutions = {}
-    if subs_rules is None:
-        subs_rules = {}
     length_ss = len(sub_sub_spaces)
     fvargen = sympy.numbered_symbols(fvarname)
-    tempgen = sympy.numbered_symbols('temp')
-    tempvars = []
     newfvars = []
     for i, ss_space in enumerate(sub_sub_spaces):
         solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
                                                 fvars, cvector, iofvars,
-                                                subs_rules, fvargen, newfvars, tempgen, tempvars))
+                                                fvargen, newfvars))
         print_progress(i, length_ss)
     solvector = []
     for fvar in fvars:
@@ -1128,22 +1099,11 @@ def sparse_solve_for_commuting_term(cvector, psi_lower, order, orders,
         except KeyError:
             newfvars.append(next(fvargen))
             solvector.append(newfvars[-1])
-    for tempvar in tempvars:
-        if tempvar not in subs_rules:
-            newfvars.append(next(fvargen))
-            subs_rules[tempvar] = newfvars[-1]
     if newfvars:
         if iofvars is not None:
             iofvars[:] = newfvars
-    if not subs_rules:
-        return simplify_group(group_type([typ(-solvector[i], list(key))
-                                          for i,key in enumerate(subspace)]))
-    else:
-        ret = simplify_group(group_type([typ(-solvector[i].xreplace(subs_rules), list(key))
-                                         for i,key in enumerate(subspace)]))
-        for tempvar in tempvars:
-            subs_rules.pop(tempvar, None)
-        return ret
+    return simplify_group(group_type([typ(-solvector[i], list(key))
+                                      for i,key in enumerate(subspace)]))
 
 
 

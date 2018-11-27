@@ -22,7 +22,6 @@ for test_order in range(START_ORDER, END_ORDER+1):
     del Hcomm
     psi = comm.substitute_group(psi, normdict, split_orders = split_orders)
     del normdict
-    subs_rules = {}
     iofvars = []
     psi_test = comm.sparse_solve_for_commuting_term(cvector,
                                                     psi,
@@ -31,15 +30,11 @@ for test_order in range(START_ORDER, END_ORDER+1):
                                                     matrixrows,
                                                     subspace,
                                                     norm = False,
-                                                    subs_rules = subs_rules,
                                                     iofvars = iofvars,
                                                     split_orders = split_orders,
                                                     fvarname = 'F' + str(test_order) + '_')
 
-    for x in sorted(subs_rules.keys(), key = lambda x: int(str(x)[2+len(str(test_order)):])):
-        print(str(x)+': ' +str(subs_rules[x]))
     print('\n')
-    psi = comm.substitute_group(psi, subs_rules, split_orders)
 
     orders.update(zip(iofvars,[test_order]*len(iofvars)))
     psi += psi_test
