@@ -1,21 +1,17 @@
-from sympy import symbols, I, pretty, sympify, Matrix, S, factorial
-from sympy.printing.ccode import ccode
-from sympy.solvers.solveset import linsolve, linear_eq_to_matrix
-from bisect import bisect_right
-import ipdb
-import json
-import yaml
-from collections import OrderedDict, defaultdict
-from itertools import chain, combinations
-import sympy
-import re
-from subprocess import check_output
-from sympy.parsing.mathematica import mathematica
 import tempfile
 import os
+from collections import OrderedDict, defaultdict
+from itertools import chain, combinations
+import re
+from sympy import  I, sympify, S, factorial
+from sympy.printing.ccode import ccode
+from bisect import bisect_right
+import yaml
+import sympy
+from subprocess import check_output
+
 from mathematica_printer import mstr
-from matlab_printer import matlabstr
-import shutil
+
 from choose_linear_solve import linear_solve
 from choose_n_h_linear_solve import n_h_linear_solve
 h_linear_solve = linear_solve
@@ -25,9 +21,9 @@ class ind_converter:
         self.row = row
         self.col = col
     def get_ind(self, x, y):
-        return x*col + y
+        return x*self.col + y
     def get_xy(self, ind):
-        y = ind % col
+        y = ind % self.col
         x = (ind - y)/col
         return x, y
 
@@ -49,21 +45,8 @@ def mathematica_parser(exprstring):
 
 mathematica_parser.vardict = {}
 
-def sort_anticommuting_list(a):
-    i = 0
-    nflips = 0
-    while i < len(a)-1:
-        if a[i] > a[i+1]:
-            a[i], a[i+1] = a[i+1],a[i]
-            nflips += 1
-            while i>0 and a[i] < a[i-1]:
-                a[i], a[i-1] = a[i-1], a[i]
-                nflips +=1
-                i -= 1
-        i+=1
-    return (-1)**nflips
 
-class Ncproduct:
+class NCProduct:
     def __init__(self, scalar, product):
         self.scalar = scalar
         if isinstance(product, list):
@@ -155,6 +138,23 @@ class Ncproduct:
         return '\u202f'.join([str(self.scalar*scalar).replace('**','^').replace('*','\u202f').replace('I','i')]
                              + strings)
 
+
+def sort_anticommuting_list(a):
+    i = 0
+    nflips = 0
+    while i < len(a)-1:
+        if a[i] > a[i+1]:
+            a[i], a[i+1] = a[i+1],a[i]
+            nflips += 1
+            while i>0 and a[i] < a[i-1]:
+                a[i], a[i-1] = a[i-1], a[i]
+                nflips +=1
+                i -= 1
+        i+=1
+    return (-1)**nflips
+
+
+class MajoranaProduct(NCProduct):
     @staticmethod
     def stringify(a):
         if a % 2 == 0:
@@ -174,9 +174,9 @@ class Ncproduct:
                 return 'a_' + str((a+1)//2)
         else:
             if a % 2 == 0:
-                return 'b_{'+init_string + ('+'+str(a//2 - 1) if a is not 2 else '') +'}'
+                return 'b_{'+init_string + ('+'+str(a//2 - 1) if a != 2 else '') +'}'
             else:
-                return 'a_{'+init_string+('+'+ str((a+1)//2 - 1) if a is not 1 else '')+'}'
+                return 'a_{'+init_string+('+'+ str((a+1)//2 - 1) if a != 1 else '')+'}'
 
     @staticmethod
     def destringify(string):
@@ -209,7 +209,9 @@ class Ncproduct:
         total = self.product + right.product
         rev =  right.product + self.product
         sign = sort_anticommuting_list(total)- sort_anticommuting_list(rev)
-        return Ncproduct(sign*self.scalar*right.scalar, total)
+        return MajoranaProduct(sign*self.scalar*right.scalar, total)
+
+
 
 
 def sort_pauli_list(a):
@@ -232,7 +234,7 @@ def sort_pauli_list(a):
     return (-1)**nflips
 
 
-class SigmaProduct(Ncproduct):
+class SigmaProduct(NCProduct):
 
     @staticmethod
     def stringify(a):
@@ -269,9 +271,9 @@ class SigmaProduct(Ncproduct):
                 return '\\sigma^z_{' + str((a+1)//2)+'}'
         else:
             if a % 2 == 0:
-                return '\\sigma^x_{' +init_string + ('+'+str(a//2 -1) if a is not 2 else '')+'}'
+                return '\\sigma^x_{' +init_string + ('+'+str(a//2 -1) if a != 2 else '')+'}'
             else:
-                return '\\sigma^z_{' +init_string + ('+'+str((a+1)//2 -1) if a is not 1 else '')+'}'
+                return '\\sigma^z_{' +init_string + ('+'+str((a+1)//2 -1) if a != 1 else '')+'}'
 
     @staticmethod
     def destringify(string):
@@ -339,7 +341,7 @@ def convert_to_sigma(ncprod):
 
 
 def convert_from_sigma(sigma):
-    ret = Ncproduct(1, [])
+    ret = MajoranaProduct(1, [])
     ret.scalar = sigma.scalar
     for el in sigma.product:
         if el % 2 == 0:
