@@ -8,20 +8,17 @@ else:
 for test_order in range(START_ORDER, END_ORDER+1):
     Hcomm = c(small, psi_order)
     psi_order = comm.unitary_transform_to_order(sz1, Gs, test_order, not_single_comm = True)
-    Hcomm = comm.simplify_group(c(Jpart, psi_order) + Hcomm)
+    Hcomm = comm.add_groups(c(Jpart, psi_order), Hcomm)
     subspace, matrixrows = comm.sparse_find_subspace(Hcomm, Jpart)
     comm.print_subspace(subspace)
-    cvector = comm.build_vector_to_cancel(Hcomm, subspace)
+    cvector = comm.build_vector(Hcomm, subspace)
     del Hcomm
     iofvars = []
-    g_comm = comm.sparse_solve_for_commuting_term(cvector,
-                                                    None,
-                                                    test_order,
-                                                    orders,
-                                                    matrixrows,
-                                                    subspace,
-                                                    iofvars = iofvars,
-                                                    fvarname = 'F' + str(test_order) + '_')
+    g_comm = comm.sparse_linear_solve(cvector,
+                                matrixrows,
+                                subspace,
+                                iofvars = iofvars,
+                                fvarname = 'F' + str(test_order) + '_')
 
     print('\n')
     #print(g_comm)
