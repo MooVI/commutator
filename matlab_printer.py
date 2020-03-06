@@ -1,6 +1,6 @@
 from sympy.printing.str import StrPrinter
 from sympy.printing.precedence import precedence, PRECEDENCE
-from sympy.core import S, RootOfUnity
+from sympy.core import S
 from sympy.printing.precedence import precedence, PRECEDENCE
 import re
 

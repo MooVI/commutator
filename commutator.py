@@ -1207,7 +1207,7 @@ def _check_sz1_uninvertible(ncprod):
 
 def _invert_sz1_G_nofvar(to_invert, Gs):
     for ncprod in to_invert:
-        #if sympy.simplify(ncprod.scalar) != 0:
+        if sympy.simplify(ncprod.scalar) != 0:
             if _check_sz1_uninvertible(ncprod):
                 raise ValueError("Not invertible: " + str(ncprod))
             else:
@@ -1240,7 +1240,7 @@ def _clean_to_invert_of_fvars(to_invert, fvars):
     for i, ss_space in enumerate(sub_sub_spaces):
         solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
                                                 fvars, cvector, None,
-                                                None, None, None, None, None))
+                                                None, None))
         print_progress(i, length_ss)
     for fvar in fvars:
         if fvar not in solutions:
