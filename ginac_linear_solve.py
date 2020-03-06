@@ -52,7 +52,6 @@ def auto_symbol_add(tokens, local_dict, global_dict):
                     result.append((NAME, name))
                     continue
 
-            print("here")
             auto_symbol_add.newfvar = next(auto_symbol_add.fvargen)
             auto_symbol_add.newfvars.append(auto_symbol_add.newfvar)
             local_dict[name] = auto_symbol_add.newfvar
@@ -105,5 +104,4 @@ def linear_solve(sparse_mat_rep, sub_cvector, length, fvars, iofvars,
     if not sols_list:
         return {}
     sols = dict(zip(fvars, sols_list))
-    print(sols)
     return {var: sol for var, sol in sols.items() if var is not sol}
