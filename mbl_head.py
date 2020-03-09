@@ -3,7 +3,7 @@ from sympy import I, symbols, latex, numbered_symbols
 
 p = comm.print_group
 c = comm.calculate_commutator
-N = comm.Ncproduct
+N = comm.MajoranaProduct
 cv = comm.convert_group
 Ncproduct = N
 

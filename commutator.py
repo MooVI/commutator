@@ -181,10 +181,28 @@ n}, Method -> "Procedural"]""".replace('\n','')
 # Classes for Majorana and Sigma Products and Utility functions
 
 class NCProduct:
+    """Class to represents eiter a Pauli or Majorana string.
+    product = the string itself, represented as a list of integers.
+    scalar = a scalar multipying the string, a numeric or Sympy expression.
+
+    For construction either:
+        - give product in list of integers directly,
+        - give space-separated string e.g. Paulis "x1 z2 y6", Majoranas
+          "a1 b4 a5."
+        - give tuple of string and list of lattice site numbers, e.g.
+          ("xyz", [1, 2, 6]), which will be expanded to "x1 z2 y6".
+
+    Assume 1-indexing.
+    """
+
     def __init__(self, scalar, product):
         self.scalar = scalar
         if isinstance(product, list):
             self.product = product
+        elif isinstance(product, tuple):
+            prodstr = ' '.join(c +str(n) for c, n in zip(product[0], product[1]))
+            self.product, scalar = self.destringify(prodstr)
+            self.scalar = self.scalar * scalar
         elif isinstance(product, str):
             self.product, scalar = self.destringify(product)
             self.scalar = self.scalar * scalar
@@ -260,6 +278,9 @@ class NCProduct:
         else:
             return typ(self.scalar*other, self.product)
 
+    def __neg__(self):
+        return type(self)(self.scalar*(-1), self.product)
+
     def __repr__(self):
         return str(self.scalar) + ' : ' +str(self.product)
 
@@ -293,6 +314,8 @@ def sort_anticommuting_list(a):
 
 
 class MajoranaProduct(NCProduct):
+    """ Majoranas on site n are labelled a_n and b_n and have integer
+    representations 2*n -1, 2*n """
     @staticmethod
     def stringify(a):
         if a % 2 == 0:
@@ -358,6 +381,8 @@ class MajoranaProduct(NCProduct):
         sign = sort_anticommuting_list(total)- sort_anticommuting_list(rev)
         return MajoranaProduct(sign*self.scalar*right.scalar, total)
 
+#Legacy compatibility.
+#Ncproduct = MajoranaProduct
 
 def sort_pauli_list(a):
     i = 0
@@ -379,7 +404,7 @@ def sort_pauli_list(a):
         i+=1
     return (-1)**nflips
 
-def count_ys_in_paul_list(a):
+def count_ys_in_pauli_list(a):
     l = len(a) - 1
     n = 0
     i = 0
@@ -389,7 +414,11 @@ def count_ys_in_paul_list(a):
     return n
 
 class SigmaProduct(NCProduct):
-
+    """ Paulis on site n are labelled x_n, y_n, z_n and have integer
+    representations z_n =  2*n-1, x_n = 2*n and y_n = i*[2n*-1, 2*n].
+    i.e. in the product y_n is given by z_n x_n and the i goes into the
+    scalar, which keeps the product effectively real.
+    """
     @staticmethod
     def stringify(a):
         if a % 2 == 0:
@@ -455,10 +484,10 @@ class SigmaProduct(NCProduct):
     def reverse_sign_product(product):
         """ The sign in the equation: product = +- (reverse-ordered product)
         for a pre-SORTED, NON-DUPLICATE product."""
-        return 1-2*(count_ys_in_paul_list(product)%2)
+        return 1-2*(count_ys_in_pauli_list(product)%2)
 
     def reverse_sign(self):
-        return 1-2*(count_ys_in_paul_list(self.product)%2)
+        return 1-2*(count_ys_in_pauli_list(self.product)%2)
 
     def commute(self, right):
         """Commutes so that self.commute(right) = [self, right]"""
@@ -477,7 +506,6 @@ def set_squares_to_identity(ncprod):
             del a[i]
         else:
             i+=1
-
 
 def convert_to_sigma(majprod):
     ret = SigmaProduct(1, [])
@@ -949,9 +977,9 @@ def check_group_at_least_order(group, order, orders):
     """Check that group only has elements of order order or higher.
     Use to check that perturbation theory is being satisfied."""
     for ncprod in group:
-        if find_order(ncprod.scalar, orders) <= order:
+        if find_order(ncprod.scalar, orders) < order:
             test = sympy.simplify(ncprod.scalar)
-            if test != 0 and find_order(test, orders) <= order:
+            if test != 0 and find_order(test, orders) < order:
                 print('Error: ' + str(test) + ': ' + str(ncprod.product))
                 return False
     return True
@@ -1096,6 +1124,8 @@ def convert_group(group):
         return group.convert()
     if not isinstance(group, list):
         group = [group]
+    if not group:
+        return []
     if isinstance(group[0], SigmaProduct):
         return [convert_from_sigma(el) for el in group]
     elif isinstance(group[0], MajoranaProduct):
@@ -1144,31 +1174,44 @@ def texify_group(group, newlines = False):
     else:
         return('$$'+group.texify().replace('\\\\','\\')+'$$')
 
-def save_group(group, filename, iofvars=None, split_orders = None, normdict = None):
+def save_group(group, filename,
+               iofvars=None,
+               split_orders = None,
+               normdict = None,
+               zeroth_order = None):
     if iofvars is None:
         iofvars = []
     if split_orders is None:
         split_orders = []
     if normdict is None:
         normdict = []
+    if zeroth_order is None:
+        zeroth_order = []
     data = OrderedDict([('group', group),
                         ('iofvars', iofvars),
                         ('split_orders', split_orders),
-                        ('normdict', normdict)])
+                        ('normdict', normdict),
+                        ('zeroth_order', zeroth_order)])
     write_yaml(data, filename)
 
-def load_group(filename, iofvars = None, split_orders = None, normdict = None):
+def load_group(filename,
+               iofvars = None,
+               split_orders = None,
+               normdict = None,
+               zeroth_order = None):
     ext = '.yaml'
     if filename[-5:] != ext:
             filename = filename + ext
     with open(filename) as f:
-        parsed = yaml.load(f)
+        parsed = yaml.load(f, Loader=yaml.FullLoader)
     if iofvars is not None:
         iofvars[:] = parsed['iofvars']
     if split_orders is not None:
         split_orders[:] = parsed['split_orders']
     if normdict is not None:
         normdict.update(parsed['normdict'])
+    if zeroth_order is not None:
+        zeroth_order[:] = parsed['zeroth_order']
     return parsed['group']
 
 
@@ -1200,7 +1243,7 @@ def sparse_fill_subspace_rows(to_cancel, matrixrows, subspace, Jpart, ind_col):
             matrixrows[ind_row].append((ind_cols[count], ncprod.scalar))
         count+=1
 
-def sparse_find_subspace(to_cancel, Jpart):
+def sparse_find_subspace(to_cancel, Jpart, verbose = False):
     """ Find the appropriate vector subspace to solve [Jpart, X] + to_cancel = 0
     by recursively commutating Jpart with to_cancel. In the process, also
     build the rows of the matrix [J, . ] into matrixrows, in triplet form:
@@ -1209,6 +1252,8 @@ def sparse_find_subspace(to_cancel, Jpart):
     """
     subspace = OrderedDict()
     matrixrows = {}
+    if verbose:
+        print("Finding subspace to invert over...")
     length = len(to_cancel)
     for i, ncprod in enumerate(to_cancel):
         if not tuple(ncprod.product) in subspace:
@@ -1216,7 +1261,8 @@ def sparse_find_subspace(to_cancel, Jpart):
             subspace[tuple(ncprod.product)] = ind
             matrixrows[ind] = []
             sparse_fill_subspace_rows(ncprod, matrixrows, subspace, Jpart, ind)
-        print_progress(i, length)
+        if verbose:
+            print_progress(i, length)
     return subspace, matrixrows
 
 def build_vector(to_cancel, subspace):
@@ -1273,7 +1319,7 @@ def sparse_find_subspace_double_comm(to_cancel, Jpart):
 # resulting matrix equation on each sub_subspace by calling an external solver.
 
 def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector,
-                           iofvars,fvargen, newfvars,
+                           iofvars,fvargen, newfvars, vardict,
                            numeric_dict = None, homogeneous = False):
     """Helper function for sparse_linear_solve which calls the external solver,
     for a give sub_subspace. Do NOT call directly, use sparse_linear_solve."""
@@ -1295,7 +1341,7 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector,
         solver = n_h_linear_solve if numeric_dict else h_linear_solve
     else:
         solver = n_linear_solve if numeric_dict else linear_solve
-    argdict = numeric_dict if numeric_dict else mathematica_parser.vardict
+    argdict = numeric_dict if numeric_dict else vardict
     sols = solver(sparse_mat_rep, sub_cvector, length, fvars,
                         iofvars, fvargen, newfvars, argdict)
     if not sols:
@@ -1313,13 +1359,14 @@ def find_sub_subspaces(matrixrows):
     return [list(space) for space in merge([[el[0] for el in row] for rownum, row in matrixrows.items()])]
 
 
-def sparse_linear_solve(cvector, matrixrows, subspace,
+def sparse_linear_solve(cvector, matrixrows, subspace, vardict,
                         typ = MajoranaProduct,
                         group_type = list,
                         fvarname = 'A',
                         iofvars = None,
                         numeric_dict = None,
-                        homogeneous = False):
+                        homogeneous = False,
+                        verbose = False):
     """ Finds the solution to matrixrows * X + cvector = 0. over a subspace,
     by solving over non-interacting sub_subspaces.
 
@@ -1333,10 +1380,12 @@ def sparse_linear_solve(cvector, matrixrows, subspace,
     fvar_gen = sympy.numbered_symbols('fvar')
     fvars = [next(fvar_gen) for i in range(len(subspace))]
     sub_sub_spaces = find_sub_subspaces(matrixrows)
-    print("Subsubspaces: ")
-    print(sub_sub_spaces)
-    print("Number: " + str(len(sub_sub_spaces)))
-    print("Lengths: " +str([len(ss) for ss in sub_sub_spaces]))
+    if verbose:
+        print("Solving operator matrix equation...")
+        print("Subsubspaces: ")
+        print(sub_sub_spaces) #Quite verbose (should make it a level)
+        print("Number: " + str(len(sub_sub_spaces)))
+        print("Dimensions: " +str([len(ss) for ss in sub_sub_spaces]))
     solutions = {}
     length_ss = len(sub_sub_spaces)
     fvargen = sympy.numbered_symbols(fvarname)
@@ -1344,7 +1393,7 @@ def sparse_linear_solve(cvector, matrixrows, subspace,
     for i, ss_space in enumerate(sub_sub_spaces):
         solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
                                                 fvars, cvector, iofvars,
-                                                fvargen, newfvars,
+                                                fvargen, newfvars, vardict,
                                                 numeric_dict = numeric_dict,
                                                 homogeneous = homogeneous))
         print_progress(i, length_ss)
@@ -1363,34 +1412,55 @@ def sparse_linear_solve(cvector, matrixrows, subspace,
 
 
 
-# Functions to invert [a1, Gs[-1]] = to_invert to find Gs[-1] --
-# a significantly easier problem than the general case above.
+def solve_commutator_equation(Jpart,
+                              to_cancel,
+                              vardict,
+                              fvarname = 'F',
+                              iofvars = None,
+                              numeric_dict = None,
+                              homogeneous = False,
+                              verbose = False,
+                              delete_to_cancel = True):
+    """ Solve the equation [Jpart, X] + to_cancel = 0 for X. See above for
+    description of arguments."""
+    typ = type(Jpart[0])
+    group_type = type(Jpart)
+    subspace, matrixrows = sparse_find_subspace(to_cancel, Jpart, verbose = verbose)
+    cvector = build_vector(to_cancel, subspace)
+    if delete_to_cancel:
+        del to_cancel
+    if verbose:
+        print_subspace(subspace, typ = typ)
+    if iofvars is None:
+        iofvars = []
+    return sparse_linear_solve(cvector,
+                               matrixrows,
+                               subspace,
+                               vardict,
+                               typ = typ,
+                               group_type = group_type,
+                               iofvars = iofvars,
+                               fvarname = fvarname,
+                               numeric_dict = numeric_dict,
+                               homogeneous = homogeneous,
+                               verbose = verbose)
 
-def _check_sz1_uninvertible(ncprod):
-    """See if invertible by checking if length even w/out 1 if present"""
-    first = (ncprod.product[0] == 1)
-    return (len(ncprod)-first*1) % 2 == 0
-
-def _invert_sz1_G_nofvar(to_invert, Gs):
-    for ncprod in to_invert:
-        if sympy.simplify(ncprod.scalar) != 0:
-            if _check_sz1_uninvertible(ncprod):
-                raise ValueError("Not invertible: " + str(ncprod))
-            else:
-                if ncprod.product[0] == 1:
-                    Gs[-1] += MajoranaProduct(-I/2*ncprod.scalar, ncprod.product[1:])
-                else:
-                    Gs[-1] += MajoranaProduct(-I/2*ncprod.scalar, [1]+ncprod.product[:])
 
 
-def _clean_to_invert_of_fvars(to_invert, fvars):
+def _clean_to_cancel_of_fvars(check_unsolvable, to_cancel, fvars, vardict, verbose):
+    """ Removes free variables from expression to cancel. Takes a
+    pragmatic approach: sets the necessary free variables so that the
+    operator equation *can* be solved at all, then sets all others to 0.
+    """
     cvector = []
     solutions = {}
     matrixrows = {}
     ind = 0
-    print(to_invert)
-    for ncprod in to_invert:
-        if _check_sz1_uninvertible(ncprod):
+    if verbose:
+        #print(to_cancel) # Too verbose even for verbose.
+        print("Setting free variables in solution...")
+    for ncprod in to_cancel:
+        if check_unsolvable(ncprod):
             term = sympy.expand(ncprod.scalar)
             matrixrows[ind] = []
             row = matrixrows[ind]
@@ -1406,20 +1476,70 @@ def _clean_to_invert_of_fvars(to_invert, fvars):
     for i, ss_space in enumerate(sub_sub_spaces):
         solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
                                                 fvars, cvector, None,
-                                                None, None))
+                                                None, None, vardict))
         print_progress(i, length_ss)
     for fvar in fvars:
         if fvar not in solutions:
-            print("Zeroing fvar: " +str(fvar))
+            if verbose:
+                print("Zeroing fvar: " +str(fvar))
             solutions[fvar] = 0
-    return substitute_group(to_invert, solutions)
+    return substitute_group(to_cancel, solutions)
 
 
-def invert_sz1_G(to_invert, Gs, fvars):
+def _solve_single_nofvar(single, to_cancel):
+    result = type(to_cancel)([])
+    for ncprod in to_cancel:
+        ncprod.scalar = sympy.simplify(ncprod.scalar) #unfortunately this seems necessary atm.
+        if ncprod.scalar != 0:
+            comm = single[0].commute(ncprod)
+            if comm.scalar == 0:
+                raise ValueError("Not invertible: " + str(ncprod))
+            else:
+                result += [-comm*S(1/4)]
+    return result
+
+def solve_single_term_commutator_equation(single, to_cancel, fvars, vardict, verbose = False):
+    """ Solve the equation [single, X] + to_cancel = 0 for X, where single
+    is a single operator string, so we can use the fact that [single, .] is
+    idempotent if it does not vanish."""
+    if not isinstance(single, list):
+        single = [single]
+    if len(single) > 1:
+        raise ValueError("Single term solver called but multiple terms in commutator.")
+    if fvars:
+        singleunit = single[0].get_unit()
+        def check_unsolvable(ncprod):
+            return singleunit.commute(ncprod.get_unit()) == 0
+        to_cancel = _clean_to_cancel_of_fvars(check_unsolvable, to_cancel, fvars, vardict, verbose)
+    return _solve_single_nofvar(single, to_cancel)
+
+
+# Functions to invert [a1, Gs[-1]] = to_invert to find Gs[-1],
+# where a1 is the first Majorana = sz1.
+# A significantly easier problem than the general case above.
+
+def _check_a1_unsolvable(ncprod):
+    """See if invertible by checking if length even w/out 1 if present"""
+    first = (ncprod.product[0] == 1)
+    return (len(ncprod)-first*1) % 2 == 0
+
+def _solve_a1_G_nofvar(to_cancel, Gs):
+    for ncprod in to_cancel:
+        ncprod.scalar = sympy.simplify(ncprod.scalar) #unfortunately this seems necessary atm.
+        if ncprod.scalar != 0:
+            if _check_a1_unsolvable(ncprod):
+                raise ValueError("Not invertible: " + str(ncprod))
+            else:
+                if ncprod.product[0] == 1:
+                    Gs[-1] += MajoranaProduct(-I/2*ncprod.scalar, ncprod.product[1:])
+                else:
+                    Gs[-1] += MajoranaProduct(-I/2*ncprod.scalar, [1]+ncprod.product[:])
+
+def solve_a1_G(to_cancel, Gs, fvars, vardict, verbose = False):
     Gs.append([])
     if fvars:
-        to_invert = _clean_to_invert_of_fvars(to_invert, fvars)
-    _invert_sz1_G_nofvar(to_invert, Gs)
+        to_cancel = _clean_to_cancel_of_fvars(_check_a1_unsolvable, to_cancel, fvars, vardict, verbose)
+    _solve_a1_G_nofvar(to_cancel, Gs)
 
 
 # Functions to build the entire vector subspace or the entire subspace
@@ -1464,7 +1584,7 @@ def fill_subspace_norm(Jpart, to_cancel, order):
 
 
 # Try to find all operators which commutes with H in the maximally brute force way
-# that is, solve [H,X] = 0 over the entire space. Obviously extremely inefficient!
+# that is, solve [H, X] = 0 over the entire space. Obviously extremely inefficient!
 
 def solve_at_once(H, L, iofvars = None, entire = False, numeric_dict = None):
     group_type = type(H[0])

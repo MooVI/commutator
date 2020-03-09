@@ -28,6 +28,7 @@ for test_order in range(START_ORDER, END_ORDER+1):
     psi_order += comm.premultiply(I, comm.commute_group(sz1, Gs[-1]))
 
     comm.save_group(Gs, FILEHEAD + '_r' + str(test_order))
+    comm.save_group(psi_order, FILEHEAD + '_psi_r' + str(test_order))
 
 
 print('Done!')
