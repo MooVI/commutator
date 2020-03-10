@@ -66,7 +66,7 @@ def main(argv):
 
         psi_order += comm.premultiply(I, comm.commute_group(H.zeroth_order, Gs[-1]))
 
-        comm.save_group(Gs, FILEHEAD + '_r' + str(test_order))
+        comm.save_group(Gs, FILEHEAD + '_r' + str(test_order), zeroth_order=H.zeroth_order)
 
 
 print('Done!')

@@ -6,9 +6,9 @@ import sys
 
 def main(argv):
     """Print norm of psi."""
+    if len(argv) < 1 or len(argv) > 2:
+        print("Usage: python3 print_error.py psi_name [max_order]")
     NAME = argv[0]
-    ORDER = 0
-    END_ORDER = int(argv[1])
     iofvars = []
     split_orders = []
     normdict = {}
@@ -16,9 +16,10 @@ def main(argv):
                      iofvars=iofvars,
                      split_orders=split_orders,
                      normdict=normdict)
+    max_order = int(str(argv[1])) if len(argv) > 2 else len(split_orders-2)
     zeroth_order = psi[split_orders[0]:split_orders[1]]
     psi = substitute_group(psi, normdict)
-    for order in range(ORDER, END_ORDER+1):
+    for order in range(max_order+1):
         norm = trace_inner_product(zeroth_order, psi[split_orders[0]:split_orders[order+1]])
         print(mstr(simplify(norm)))
 

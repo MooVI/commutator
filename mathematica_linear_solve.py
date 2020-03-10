@@ -5,7 +5,7 @@ import os
 from subprocess import check_output
 import shutil
 
-command='/home/kempj/bin/MathematicaScript'
+command='/home/kempl/bin/wolfram'
 
 def mathematica_parser(exprstring):
     return sympify(exprstring.replace('^', '**'), mathematica_parser.vardict)

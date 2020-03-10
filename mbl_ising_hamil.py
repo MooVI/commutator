@@ -1,4 +1,4 @@
-from sympy import I, symbols, numbered_symbols
+from sympy import I, symbols, numbered_symbols, S
 import commutator as comm
 
 p = comm.print_group

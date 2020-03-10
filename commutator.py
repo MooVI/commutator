@@ -6,7 +6,8 @@ import re
 from sympy import  I, sympify, S, factorial
 from sympy.printing.ccode import ccode
 from bisect import bisect_right
-import yaml
+#import yaml
+import pickle
 import sympy
 from subprocess import check_output
 
@@ -110,26 +111,26 @@ def merge(lsts):
 def print_progress(i, length):
     print(str(i+1)+'/'+str(length), end = '\r')
 
-def ordered_dump(data, stream=None, Dumper=yaml.Dumper, **kwds):
-    class OrderedDumper(Dumper):
-        pass
-    def _dict_representer(dumper, data):
-        return dumper.represent_mapping(
-            yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
-            data.items())
-    OrderedDumper.add_representer(OrderedDict, _dict_representer)
-    return yaml.dump(data, stream, OrderedDumper, **kwds)
+# def ordered_dump(data, stream=None, Dumper=yaml.Dumper, **kwds):
+#     class OrderedDumper(Dumper):
+#         pass
+#     def _dict_representer(dumper, data):
+#         return dumper.represent_mapping(
+#             yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+#             data.items())
+#     OrderedDumper.add_representer(OrderedDict, _dict_representer)
+#     return yaml.dump(data, stream, OrderedDumper, **kwds)
 
 
-def write_yaml(data, filename, **kwargs):
-    """Writes yaml to file. Use py:class:`OrderedDict` to preserve key
-    order.
-    """
-    if filename[-5:] != ".yaml":
-        filename = filename + ".yaml"
-    with open(filename, mode = 'w') as file_obj:
-        ordered_dump(data, stream=file_obj, default_flow_style = False,
-                     **kwargs)
+# def write_yaml(data, filename, **kwargs):
+#     """Writes yaml to file. Use py:class:`OrderedDict` to preserve key
+#     order.
+#     """
+#     if filename[-5:] != ".yaml":
+#         filename = filename + ".yaml"
+#     with open(filename, mode = 'w') as file_obj:
+#         ordered_dump(data, stream=file_obj, default_flow_style = False,
+#                      **kwargs)
 
 # Mathematica Parsing Functions
 
@@ -382,7 +383,7 @@ class MajoranaProduct(NCProduct):
         return MajoranaProduct(sign*self.scalar*right.scalar, total)
 
 #Legacy compatibility.
-#Ncproduct = MajoranaProduct
+Ncproduct = MajoranaProduct
 
 def sort_pauli_list(a):
     i = 0
@@ -1175,10 +1176,13 @@ def texify_group(group, newlines = False):
         return('$$'+group.texify().replace('\\\\','\\')+'$$')
 
 def save_group(group, filename,
-               iofvars=None,
+               iofvars = None,
                split_orders = None,
                normdict = None,
                zeroth_order = None):
+    ext = '.p'
+    if filename[-2:] != ext:
+            filename = filename + ext
     if iofvars is None:
         iofvars = []
     if split_orders is None:
@@ -1192,18 +1196,19 @@ def save_group(group, filename,
                         ('split_orders', split_orders),
                         ('normdict', normdict),
                         ('zeroth_order', zeroth_order)])
-    write_yaml(data, filename)
+    with open(filename, "wb" ) as f:
+        pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 def load_group(filename,
                iofvars = None,
                split_orders = None,
                normdict = None,
                zeroth_order = None):
-    ext = '.yaml'
-    if filename[-5:] != ext:
+    ext = '.p'
+    if filename[-2:] != ext:
             filename = filename + ext
-    with open(filename) as f:
-        parsed = yaml.load(f, Loader=yaml.FullLoader)
+    with open(filename, "rb") as f:
+        parsed = pickle.load(f)
     if iofvars is not None:
         iofvars[:] = parsed['iofvars']
     if split_orders is not None:
@@ -1495,7 +1500,7 @@ def _solve_single_nofvar(single, to_cancel):
             if comm.scalar == 0:
                 raise ValueError("Not invertible: " + str(ncprod))
             else:
-                result += [-comm*S(1/4)]
+                result += [-comm*sympy.Rational(1,4)]
     return result
 
 def solve_single_term_commutator_equation(single, to_cancel, fvars, vardict, verbose = False):

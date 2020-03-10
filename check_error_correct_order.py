@@ -2,11 +2,10 @@ import sys
 import importlib.util
 from pathlib import Path
 
-from sympy import I
-
-
 def main(argv):
-    """ Print trace norm square of commutator of psi with H, the error squared."""
+    """ Checks the commutator with H is the claimed order in perturbation theory.
+    This is maximally suspicious check, unlike print_error.py which assumes this is true
+    already for optimisation. This means it might be slow..."""
 
     if len(argv) < 2 or len(argv) > 3:
         print("Usage: python3 print_error.py XXX_hamil.py psi_name [max_order]")
@@ -27,12 +26,12 @@ def main(argv):
     max_order = int(str(argv[2])) if len(argv) > 2 else len(split_orders)-2
     psi = comm.substitute_group(psi, normdict)
     for order in range(0, max_order+1):
-        error = comm.calculate_commutator(H.small, psi[split_orders[order]:split_orders[order+1]])
-        #print(psi[split_orders[order]:split_orders[order+1]])
-        print(error)
-        error_norm = comm.square_to_find_identity_scalar(error)
-        print(comm.mstr(error_norm))
-        #print(order)
+        print("At order " + str(order) + ": " +
+              str(comm.check_group_at_least_order(
+                  comm.calculate_commutator(H.H, psi[:split_orders[order+1]]),
+                  order+1,
+                  H.orders))
+        )
 
 if __name__ == "__main__":
     main(sys.argv[1:])

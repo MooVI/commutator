@@ -1,13 +1,16 @@
-from commutator import load_group, unitary_transform_to_order, save_group
 import sys
+from commutator import load_group, unitary_transform_to_order, save_group
+
 
 def main(argv):
     """Convert unitary of form U = e^i(Gs[0] + Gs[1]+...) to operator psi."""
+    if len(argv) < 2 or len(argv) > 3:
+        print("Usage: python3 print_error.py unitary_name output_name [max_order]")
     gs_name = argv[0]
     psi_name = argv[1]
-    max_order = int(argv[2])
     zeroth_order = []
-    Gs = load_group(gs_name, zeroth_order)
+    Gs = load_group(gs_name, zeroth_order=zeroth_order)
+    max_order = int(str(argv[2])) if len(argv) > 2 else len(Gs)
     split_orders = [0, 1]
     psi = zeroth_order[:]
     for order in range(1, max_order+1):
