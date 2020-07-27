@@ -792,6 +792,11 @@ def math_collect_terms(group):
 def remove_zeros(group):
     group[:] = (a for a in group if a.scalar != 0)
 
+def simplify_remove_zeros(group):
+    for ncprod in group:
+        ncprod.scalar = sympy.simplify(ncprod.scalar)
+    group[:] = (a for a in group if a.scalar != 0)
+
 def simplify_group(group):
     if isinstance(group, TransInvSum):
         return group.simplify()
@@ -1327,7 +1332,7 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector,
                            iofvars,fvargen, newfvars, vardict,
                            numeric_dict = None, homogeneous = False):
     """Helper function for sparse_linear_solve which calls the external solver,
-    for a give sub_subspace. Do NOT call directly, use sparse_linear_solve."""
+    for a given sub_subspace. Do NOT call directly, use sparse_linear_solve."""
     sspacedict = dict(zip(sub_sub_space, range(len(sub_sub_space))))
     length = len(sub_sub_space)
     sparse_mat_rep = OrderedDict()
@@ -1494,16 +1499,13 @@ def _clean_to_cancel_of_fvars(check_unsolvable, to_cancel, fvars, vardict, verbo
 def _solve_single_nofvar(single, to_cancel):
     result = type(to_cancel)([])
     for ncprod in to_cancel:
-        ncprod.scalar = sympy.simplify(ncprod.scalar) #unfortunately this seems necessary atm.
-        if ncprod.scalar != 0:
-            comm = single[0].commute(ncprod)
-            if comm.scalar == 0:
-                raise ValueError("Not invertible: " + str(ncprod))
-            else:
-                result += [-comm*sympy.Rational(1,4)]
+        comm = single[0].commute(ncprod)
+        if comm.scalar == 0:
+            raise ValueError("Not invertible: " + str(ncprod))
+        result += [-comm*sympy.Rational(1, 4)]
     return result
 
-def solve_single_term_commutator_equation(single, to_cancel, fvars, vardict, verbose = False):
+def solve_single_term_commutator_equation(single, to_cancel, fvars, vardict, verbose=False):
     """ Solve the equation [single, X] + to_cancel = 0 for X, where single
     is a single operator string, so we can use the fact that [single, .] is
     idempotent if it does not vanish."""
@@ -1511,10 +1513,11 @@ def solve_single_term_commutator_equation(single, to_cancel, fvars, vardict, ver
         single = [single]
     if len(single) > 1:
         raise ValueError("Single term solver called but multiple terms in commutator.")
+    simplify_remove_zeros(to_cancel)
     if fvars:
         singleunit = single[0].get_unit()
         def check_unsolvable(ncprod):
-            return singleunit.commute(ncprod.get_unit()) == 0
+            return singleunit.commute(ncprod.get_unit()).scalar == 0
         to_cancel = _clean_to_cancel_of_fvars(check_unsolvable, to_cancel, fvars, vardict, verbose)
     return _solve_single_nofvar(single, to_cancel)
 
