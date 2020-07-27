@@ -1398,25 +1398,28 @@ def sparse_linear_solve(cvector, matrixrows, subspace, vardict,
         print("Dimensions: " +str([len(ss) for ss in sub_sub_spaces]))
     solutions = {}
     length_ss = len(sub_sub_spaces)
-    fvargen = sympy.numbered_symbols(fvarname)
+    fvar_gen = sympy.numbered_symbols(fvarname)
     newfvars = []
     for i, ss_space in enumerate(sub_sub_spaces):
         solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
                                                 fvars, cvector, iofvars,
-                                                fvargen, newfvars, vardict,
+                                                fvar_gen, newfvars, vardict,
                                                 numeric_dict = numeric_dict,
                                                 homogeneous = homogeneous))
         print_progress(i, length_ss)
     solvector = []
+    subs_rules = {}
     for fvar in fvars:
         try:
             solvector.append(solutions[fvar])
         except KeyError:
-            newfvars.append(next(fvargen))
+            newfvars.append(next(fvar_gen))
             solvector.append(newfvars[-1])
+            subs_rules[fvar] = newfvars[-1]
     if newfvars:
         if iofvars is not None:
             iofvars[:] = newfvars
+        solvector[:] = (vec.xreplace(subs_rules) for vec in solvector)
     return simplify_group(group_type([typ(-solvector[i], list(key))
                                       for i,key in enumerate(subspace)]))
 
