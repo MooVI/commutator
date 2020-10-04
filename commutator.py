@@ -934,6 +934,11 @@ def hermitian_trace_inner_product(group_a, group_b):
                    *group_b[j].scalar)
     return result
 
+def trace_hermitian_square(group):
+    result = 0
+    for ncprod in collect_terms(group):
+        result += (sympy.expand(sympy.conjugate(ncprod.scalar)*ncprod.scalar))
+    return result
 
 
 
@@ -1511,7 +1516,8 @@ def _solve_single_nofvar(single, to_cancel):
 def solve_single_term_commutator_equation(single, to_cancel, fvars, vardict, verbose=False):
     """ Solve the equation [single, X] + to_cancel = 0 for X, where single
     is a single operator string, so we can use the fact that [single, .] is
-    idempotent if it does not vanish."""
+    idempotent if it does not vanish.
+"""
     if not isinstance(single, list):
         single = [single]
     if len(single) > 1:
