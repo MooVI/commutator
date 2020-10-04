@@ -38,7 +38,8 @@ def next_permutationS(l):
     '''Changes a list to its next permutation, in place. From
     http://stackoverflow.com/questions/6534430/why-does-pythons-iterto
     ols-permutations-contain-duplicates-when-the-original
-    Returns true unless wrapped around so result is lexicographically smaller. '''
+    Returns true unless wrapped around so result is lexicographically smaller.
+    '''
     n = len(l)
     #Step 1: Find tail
     last = n-1 #tail is from `last` to end
@@ -316,7 +317,8 @@ def sort_anticommuting_list(a):
 
 class MajoranaProduct(NCProduct):
     """ Majoranas on site n are labelled a_n and b_n and have integer
-    representations 2*n -1, 2*n """
+    representations 2*n -1, 2*n
+    """
     @staticmethod
     def stringify(a):
         if a % 2 == 0:
@@ -359,7 +361,8 @@ class MajoranaProduct(NCProduct):
     @staticmethod
     def reverse_sign_product(product):
         """ The sign in the equation: product = +- (reverse-ordered product)
-        for a pre-SORTED, NON-DUPLICATE product."""
+        for a pre-SORTED, NON-DUPLICATE product.
+        """
         return 2*( len(product)%4 < 2) - 1
 
     def reverse_sign(self):
@@ -484,7 +487,8 @@ class SigmaProduct(NCProduct):
     @staticmethod
     def reverse_sign_product(product):
         """ The sign in the equation: product = +- (reverse-ordered product)
-        for a pre-SORTED, NON-DUPLICATE product."""
+        for a pre-SORTED, NON-DUPLICATE product.
+        """
         return 1-2*(count_ys_in_pauli_list(product)%2)
 
     def reverse_sign(self):
@@ -859,7 +863,8 @@ def subtract_groups(group_a, group_b):
 
 def commute_group(group_a, group_b):
     """For known groups. Prefer using calculate_commutator instead if
-    could be individual NCProducts as well."""
+    could be individual NCProducts as well.
+    """
     result = []
     for a in group_a:
         for b in group_b:
@@ -986,7 +991,8 @@ def order_group(group, orders):
 
 def check_group_at_least_order(group, order, orders):
     """Check that group only has elements of order order or higher.
-    Use to check that perturbation theory is being satisfied."""
+    Use to check that perturbation theory is being satisfied.
+    """
     for ncprod in group:
         if find_order(ncprod.scalar, orders) < order:
             test = sympy.simplify(ncprod.scalar)
@@ -1107,7 +1113,8 @@ def exponentiate_to_order(Gs, torder, inverse = False):
 
 def substitute_group(group, subs_rules, split_orders = None):
     """ Replace Sympy symbols in scalars in groups with the replacements subs_rules,
-    keeping split_orders updated if need be. """
+    keeping split_orders updated if need be.
+    """
     temp = [type(group[0])(sympify(ncprod.scalar).xreplace(subs_rules),
                      ncprod.product) for ncprod in group]
     remove_zeros(temp)
@@ -1337,7 +1344,8 @@ def solve_for_sub_subspace(matrixrows, sub_sub_space, coeffs, cvector,
                            iofvars,fvargen, newfvars, vardict,
                            numeric_dict = None, homogeneous = False):
     """Helper function for sparse_linear_solve which calls the external solver,
-    for a given sub_subspace. Do NOT call directly, use sparse_linear_solve."""
+    for a given sub_subspace. Do NOT call directly, use sparse_linear_solve.
+    """
     sspacedict = dict(zip(sub_sub_space, range(len(sub_sub_space))))
     length = len(sub_sub_space)
     sparse_mat_rep = OrderedDict()
@@ -1440,7 +1448,8 @@ def solve_commutator_equation(Jpart,
                               verbose = False,
                               delete_to_cancel = True):
     """ Solve the equation [Jpart, X] + to_cancel = 0 for X. See above for
-    description of arguments."""
+    description of arguments.
+    """
     typ = type(Jpart[0])
     group_type = type(Jpart)
     subspace, matrixrows = sparse_find_subspace(to_cancel, Jpart, verbose = verbose)
@@ -1517,7 +1526,7 @@ def solve_single_term_commutator_equation(single, to_cancel, fvars, vardict, ver
     """ Solve the equation [single, X] + to_cancel = 0 for X, where single
     is a single operator string, so we can use the fact that [single, .] is
     idempotent if it does not vanish.
-"""
+    """
     if not isinstance(single, list):
         single = [single]
     if len(single) > 1:
