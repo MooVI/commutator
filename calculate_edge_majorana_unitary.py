@@ -27,7 +27,9 @@ def main(argv):
     comm = H.comm
     c = comm.calculate_commutator
     Gs = START_GS
-    a1 = [comm.MajoranaProduct(1, [1])]
+    H.large = comm.NCSum(H.large)
+    H.small = comm.NCSum(H.small)
+    a1 = comm.NCSum(comm.MajoranaProduct(1, [1]))
     if isinstance(H.large[0], comm.SigmaProduct):
         H.small = comm.convert_group(H.small)
         H.large = comm.convert_group(H.large)
@@ -35,7 +37,7 @@ def main(argv):
     if START_GS:
         psi_order = comm.unitary_transform_to_order(a1, Gs, START_ORDER-1)
     else:
-        psi_order = a1[:]
+        psi_order = comm.NCSum(a1[:])
 
     #Solve order by order for the unitary
     for test_order in range(START_ORDER, END_ORDER+1):
@@ -44,7 +46,7 @@ def main(argv):
 
         Hcomm = c(H.small, psi_order)
         psi_order = comm.unitary_transform_to_order(a1, Gs, test_order, not_single_comm=True)
-        Hcomm = comm.add_groups(c(H.large, psi_order), Hcomm)
+        Hcomm = c(H.large, psi_order) +  Hcomm
 
         fvarname = 'F' + str(test_order) + '_'
         iofvars = []
@@ -61,7 +63,7 @@ def main(argv):
 
         comm.solve_a1_G(g_comm, Gs, iofvars, H.vardict)
 
-        psi_order += comm.premultiply(I, comm.commute_group(a1, Gs[-1]))
+        psi_order.add_no_simplify(I*comm.commute_group(a1, Gs[-1]))
 
         comm.save_group(Gs, FILEHEAD + '_r' + str(test_order), zeroth_order=a1)
 

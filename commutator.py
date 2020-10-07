@@ -239,37 +239,45 @@ class NCProduct:
         return len(self.product)
 
     def __add__(self, other):
-        """Note add just returns a list, as this is addition"""
-        if not isinstance(other,list):
-            return [self, other]
-        else:
-            return [self]+other
+        """Note add just returns a NCSum, as this is addition"""
+        if isinstance(other,NCProduct):
+            return simplify_group([self, other])
+        elif isinstance(other,NCSum):
+            return simplify_group([self]+other.group)
+        raise TypeError('Not an NCSum or NCProduct added to NCSum')
+
 
     def __radd__(self, other):
-        """Note add just returns a list, as this is addition"""
-        if not isinstance(other,list):
-            return [other, self]
-        else:
-            return other+[self]
+        """Note add just returns a NCSum, as this is addition"""
+        if isinstance(other,NCProduct):
+            return simplify_group([other, self])
+        elif isinstance(other,NCSum):
+            return simplify_group(other.group+[self])
+        raise TypeError('Not an NCSum or NCProduct added to NCSum')
 
     def __sub__(self, other):
-        """Note add just returns a list, as this is addition"""
-        if not isinstance(other,list):
-            return [self, other*(-1)]
-        else:
-            return [self]+[a*(-1) for a in other]
+        """Note add just returns a NCSum, as this is addition"""
+        if isinstance(other,NCProduct):
+            return simplify_group([self, -other])
+        elif isinstance(other,NCSum):
+            return simplify_group([self]+[-a for a in other])
+        raise TypeError('Not an NCSum or NCProduct added to NCSum')
+
 
     def __rsub__(self, other):
-        """Note add just returns a list, as this is addition"""
-        if not isinstance(other,list):
-            return [other, self*(-1)]
-        else:
-            return other+[self*(-1)]
+        """Note add just returns a NCSum, as this is addition"""
+        if isinstance(other,NCProduct):
+            return simplify_group([other, -self])
+        elif isinstance(other,NCSum):
+            return simplify_group(other.group+[-self])
+        raise TypeError('Not an NCSum or NCProduct added to NCSum')
 
     def __mul__(self, other):
         typ = type(self)
         if isinstance(other, typ):
             return typ(self.scalar*other.scalar, self.product+other.product)
+        elif isinstance(other, NCSum):
+            return multiply_groups(NCSum(self), other)
         else:
             return typ(self.scalar*other, self.product)
 
@@ -277,6 +285,8 @@ class NCProduct:
         typ = type(self)
         if isinstance(other, typ):
             return typ(self.scalar*other.scalar, other.product+self.product)
+        elif isinstance(other, NCSum):
+            return multiply_groups(other, NCSum(self))
         else:
             return typ(self.scalar*other, self.product)
 
@@ -284,12 +294,13 @@ class NCProduct:
         return type(self)(self.scalar*(-1), self.product)
 
     def __repr__(self):
-        return str(self.scalar) + ' : ' +str(self.product)
+        return str(self)
+        #return str(self.scalar) + ' : ' +str(self.product)
 
     def __eq__(self, other):
-        """Note == ignores the scalar field!"""
+        """Is scalar and product equal?"""
         try:
-            return self.product == other.product
+            return self.product == other.product and self.scalar == other.scalar
         except:
             return False
 
@@ -298,6 +309,9 @@ class NCProduct:
         return '\u202f'.join([str(self.scalar*scalar).replace('**','^').replace('*','\u202f').replace('I','i')]
                              + strings)
 
+    def translate(self, nSites):
+        db = nSites*2
+        return type(self)(self.scalar, [el+db for el in self.product])
 
 def sort_anticommuting_list(a):
     i = 0
@@ -748,20 +762,141 @@ class ind_converter:
 
 
 
-# Functions for dealing with 'groups' = lists of NCProducts
-# representing **sums**.
+# Class NCSum
+# representing **sums** of NCProducts. An instance of an NCSum is called
+# 'group' in the code.
 
 # After any operation which might zero elements of a sum,
 # or add duplicates which need to be merged simplify_group should be called.
+# All of the group utility functions (operators +,-, * or functions
+# multiply_groups, add_groups, etc.) do this automatically.
+# If you wish to add groups without this .add_no_simplify can be used.
 
 # full_simplify_group calls sympy.simplfy on each element. This is **slow**
 # and should only be done when necesssary. mathematica_simplify_group does the
 # same for mathematica.
 
-# All of the group utility functions (multiply_groups, add_groups, etc.)
-# do this automatically
 
-# TODO: Make this a class with proper syntatic sugar.
+class NCSum:
+    def __init__(self, group):
+        if isinstance(group, list):
+            self.group = group
+        elif isinstance(group, NCSum):
+            self = group
+        elif isinstance(group, NCProduct):
+            self.group = [group]
+        elif group == 0:
+            self.group = []
+        else:
+            TypeError(str(type(group)) + " not convertable to NCSum")
+
+    def __getitem__(self, ind):
+        return self.group[ind]
+
+    def __setitem__(self, ind, value):
+        self.group[ind] = value
+
+    def __len__(self):
+        return len(self.group)
+
+    def __iter__(self):
+        return iter(self.group)
+
+    def extend(self, group):
+        if isinstance(group, NCSum):
+            self.group += group.group
+        else:
+            self.group += group
+
+    def add_no_simplify(self, group):
+        self.group += group.group
+
+    def is_zero(self):
+        return len(self.group) == 0
+
+    def __add__(self, other):
+        if isinstance(other, NCSum):
+            return simplify_group(self.group + other.group)
+        elif isinstance(other, NCProduct):
+            return simplify_group(self.group + [other])
+        elif other == 0:
+            return self
+        else:
+            raise TypeError('Not an NCSum or NCProduct')
+
+    def __radd__(self, other):
+        if isinstance(other, NCSum):
+            return simplify_group(other.group + self.group)
+        elif isinstance(other, NCProduct):
+            return simplify_group([other] + self.group)
+        elif other == 0:
+            return self
+        else:
+            raise TypeError('Not an NCSum or NCProduct added to NCSum')
+
+    def __sub__(self, other):
+        if isinstance(other, NCSum):
+            return simplify_group(self.group + [-a for a in other])
+        elif isinstance(other, NCProduct):
+            return simplify_group(self.group + [-other])
+        elif other == 0:
+            return self
+        else:
+            raise TypeError('Not an NCSum or NCProduct added to NCSum')
+
+    def __rsub__(self, other):
+        if isinstance(other, NCSum):
+            return simplify_group(other.group + [-a for a in self])
+        elif isinstance(other, NCProduct):
+            return simplify_group([other] + [-a for a in self])
+        elif other == 0:
+            return -self
+        else:
+            raise TypeError('Not an NCSum or NCProduct added to NCSum')
+
+    def __neg__(self):
+        return (-1)*self
+
+    def __mul__(self, other):
+        if isinstance(other, NCSum):
+            return multiply_groups(self, other)
+        elif isinstance(other, NCProduct):
+            return multiply_groups(self, NCSum(other))
+        else:
+            return NCSum([a*other for a in self])
+
+    def __rmul__(self, other):
+        if isinstance(other, NCSum):
+            return multiply_groups(other, self)
+        elif isinstance(other, NCProduct):
+            return multiply_groups(NCSum(other), self)
+        else:
+            return NCSum([a*other for a in self])
+
+    def __repr__(self):
+        return repr(self.group)
+
+    def __str__(self):
+        if self._is_zero_():
+            return '0'
+        return (' + '.join([str(ncprod) for ncprod in self]))
+
+    def translate(self, nSites):
+        return NCSum([a.translate(nSites) for a in self])
+
+    def texify(self, orders=None):
+        return('\\begin{align*}\n \\sum_j '
+               +'\\\\\n'.join(' &' + a.texify('j').replace('\\\\','\\')
+                              for a in self)+'\n\\end{align*}')
+
+    def __eq__(self, other):
+        if isinstance(other, NCSum):
+            return (self-other).is_zero()
+        elif isinstance(other, NCProduct):
+            return (self-NCSum(other)).is_zero()
+        if other == 0:
+            return self.is_zero()
+        return False
 
 
 # Simplification of groups
@@ -771,27 +906,27 @@ def collect_terms(group):
     D = defaultdict(list)
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].append(i)
-    return type(group)(type(group[0])(
+    return NCSum([type(group[0])(
         sympy.expand(sum([group[i].scalar for i in D[key]])), list(key))
-                       for key in D)
+                       for key in D])
 
 def full_collect_terms(group):
     from collections import defaultdict
     D = defaultdict(list)
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].append(i)
-    return type(group)(type(group[0])(
+    return NCSum([type(group[0])(
         sympy.simplify(sum([group[i].scalar for i in D[key]])), list(key))
-                       for key in D)
+                                for key in D])
 
 def math_collect_terms(group):
     from collections import defaultdict
     D = defaultdict(list)
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].append(i)
-    return type(group)(type(group[0])(
+    return NCSum([type(group[0])(
         mathematica_simplify(sum([group[i].scalar for i in D[key]])), list(key))
-                       for key in D)
+                       for key in D])
 
 def remove_zeros(group):
     group[:] = (a for a in group if a.scalar != 0)
@@ -802,8 +937,6 @@ def simplify_remove_zeros(group):
     group[:] = (a for a in group if a.scalar != 0)
 
 def simplify_group(group):
-    if isinstance(group, TransInvSum):
-        return group.simplify()
     remove_zeros(group)
     for ncprod in group:
         ncprod.sort()
@@ -813,9 +946,6 @@ def simplify_group(group):
     return group
 
 def full_simplify_group(group):
-    if isinstance(group, TransInvSum):
-        print("Full simplify not supported for TransInv.")
-        return group.simplify()
     remove_zeros(group)
     for ncprod in group:
         ncprod.sort()
@@ -825,9 +955,6 @@ def full_simplify_group(group):
     return group
 
 def mathematica_simplify_group(group, use_tempfile = False):
-    if isinstance(group, TransInvSum):
-        print("Mathematica simplify not supported for TransInv.")
-        return group.simplify()
     remove_zeros(group)
     for ncprod in group:
         ncprod.sort()
@@ -841,16 +968,18 @@ def mathematica_simplify_group(group, use_tempfile = False):
 # Basic Group Mathematical Functions--------------------
 
 def conjugate_group(group):
-    return [a.conjugate() for a in group]
+    return NCSum([a.conjugate() for a in group])
 
 def hermitian_conjugate_group(group):
-    return [a.hermitian_conjugate() for a in group]
+    return NCSum([a.hermitian_conjugate() for a in group])
+
+#Legacy functions, use syntatic sugar instead (i.e just +,*,-)-------
 
 def postmultiply(group,a):
-     return type(group)([b*a for b in group])
+     return group*a
 
 def premultiply(a, group):
-    return type(group)([a*b for b in group])
+    return a*group
 
 def multiply_groups(group_a, group_b):
     return simplify_group([a*b for a in group_a for b in group_b])
@@ -861,6 +990,8 @@ def add_groups(group_a, group_b):
 def subtract_groups(group_a, group_b):
     return simplify_group(group_a+premultiply(-1, group_b))
 
+#End legacy functions---------------------------------
+
 def commute_group(group_a, group_b):
     """For known groups. Prefer using calculate_commutator instead if
     could be individual NCProducts as well.
@@ -870,7 +1001,7 @@ def commute_group(group_a, group_b):
         for b in group_b:
             if not (a.is_identity() or b.is_identity()):
                 result.append(a.commute(b))
-    return result
+    return NCSum(result)
 
 def calculate_commutator(group_a, group_b):
     """Works with single NCProducts and TransInvSum as well"""
@@ -888,9 +1019,9 @@ def calculate_commutator(group_a, group_b):
                 group_a = [group_a]
         group = commute_group_semi_inv(group_a, group_b, sign =1)
     else:
-        if not isinstance(group_a, list):
+        if isinstance(group_a, NCProduct):
                 group_a = [group_a]
-        if not isinstance(group_b, list):
+        if isinstance(group_b, NCProduct):
                 group_b = [group_b]
         group = commute_group(group_a, group_b)
     return simplify_group(group)
@@ -987,7 +1118,7 @@ def neglect_to_order(expr, order, orders):
 
 def order_group(group, orders):
     """Sort group by orders in perturbation theory"""
-    return sorted(group, key = lambda a: find_order(a.scalar,orders))
+    return NCSum(sorted(group, key = lambda a: find_order(a.scalar,orders)))
 
 def check_group_at_least_order(group, order, orders):
     """Check that group only has elements of order order or higher.
@@ -1006,12 +1137,12 @@ def commute_up_to_order(group_a, group_b, order, split_orders_a, split_orders_b)
     a_order_max = len(split_orders_a)-1
     b_order_max = len(split_orders_b)-1
     if a_order_max + b_order_max <= order:
-        return commute_group(group_a, group_b)
+        return simplify_group(commute_group(group_a, group_b))
     for aorder in range(a_order_max):
         for border in range(min([order-aorder, b_order_max])):
             result += commute_group(group_a[split_orders_a[aorder]:split_orders_a[aorder+1]],
                                     group_b[split_orders_b[border]:split_orders_b[border+1]])
-    return result
+    return simplify_group(result)
 
 def square_group_to_order(group, order, split_orders):
     return simplify_group([(a*b)
@@ -1041,8 +1172,7 @@ def unitary_transform(to_trans, Gs, max_order, inverse = False):
     where Gs[n] has order n+1. max_order is max_order of output,
     inverse = true calculates -i rather than +i.
     """
-    group_type = type(to_trans)
-    result = group_type(to_trans)
+    result = NCSum(to_trans)
     for torder in range(1,max_order+1):
         for orderset in accel_asc(torder):
             numcomms = len(orderset)
@@ -1051,10 +1181,10 @@ def unitary_transform(to_trans, Gs, max_order, inverse = False):
             else:
                 taylorscalar = (I**numcomms)/factorial(numcomms)
             while True:
-                cumul = group_type(to_trans)
+                cumul = NCSum(to_trans)
                 for order in orderset:
                     cumul = calculate_commutator(cumul, Gs[order-1])
-                result += premultiply(taylorscalar,cumul)
+                result.extend(taylorscalar*cumul)
                 if not next_permutationS(orderset):
                     break
     return simplify_group(result)
@@ -1067,10 +1197,9 @@ def unitary_transform_to_order(to_trans, Gs, torder,
     inverse = true calculates with a - sign. not_single_comm = true avoids using
     Gs[torder-1] for when this is not known yet.
     """
-    group_type = type(to_trans)
     if torder == 0:
-        return group_type(to_trans)
-    result =  group_type([])
+        return NCSum(to_trans)
+    result = NCSum([])
     for orderset in accel_asc(torder):
         numcomms = len(orderset)
         if numcomms != 1 or not not_single_comm:
@@ -1079,10 +1208,10 @@ def unitary_transform_to_order(to_trans, Gs, torder,
             else:
                 taylorscalar = (I**numcomms)/factorial(numcomms)
             while True:
-                cumul = group_type(to_trans)
+                cumul = NCSum(to_trans)
                 for order in orderset:
                     cumul = calculate_commutator(cumul, Gs[order-1])
-                result += premultiply(taylorscalar,cumul)
+                result.extend(taylorscalar*cumul)
                 if not next_permutationS(orderset):
                     break
     return simplify_group(result)
@@ -1090,8 +1219,8 @@ def unitary_transform_to_order(to_trans, Gs, torder,
 def exponentiate_to_order(Gs, torder, inverse = False):
     """Calculate U = e^i(Gs[0]+Gs[1]+Gs[2]+...), see above."""
     if torder == 0:
-        return [type(Gs[0][0])(1,[])]
-    result = []
+        return NCSum([type(Gs[0][0])(1,[])])
+    result = NCSum([])
     for orderset in accel_asc(torder):
         numcomms = len(orderset)
         if inverse:
@@ -1102,7 +1231,7 @@ def exponentiate_to_order(Gs, torder, inverse = False):
             cumul = [1]
             for order in orderset:
                 cumul = multiply_groups(cumul, Gs[order-1])
-            result += premultiply(taylorscalar,cumul)
+            result.extend(taylorscalar*cumul)
             if not next_permutationS(orderset):
                 break
     return simplify_group(result)
@@ -1140,14 +1269,14 @@ def split_free_vars(group, fvars):
 def convert_group(group):
     if isinstance(group, TransInvSum):
         return group.convert()
-    if not isinstance(group, list):
-        group = [group]
-    if not group:
+    if not isinstance(group, NCSum):
+        group = NCSum(group)
+    if group.is_zero():
         return []
     if isinstance(group[0], SigmaProduct):
-        return [convert_from_sigma(el) for el in group]
+        return NCSum([convert_from_sigma(el) for el in group])
     elif isinstance(group[0], MajoranaProduct):
-        return [convert_to_sigma(el) for el in group]
+        return NCSum([convert_to_sigma(el) for el in group])
     else:
         raise ValueError('Unrecognised conversion asked for!')
 
@@ -1156,7 +1285,7 @@ def convert_group(group):
 def print_group(group, breaks = True, neglect_order = None):
     if not hasattr(print_group, 'orders'):
         print_group.orders = {}
-    if isinstance(group, list):
+    if isinstance(group, NCSum):
         if len(group) > 1:
             group = order_group(group, print_group.orders)
             if neglect_order is not None:
@@ -1177,7 +1306,7 @@ def texify_group(group, newlines = False):
     """Uses same orders as print_group"""
     if not hasattr(print_group, 'orders'):
         print_group.orders = {}
-    if isinstance(group, list):
+    if isinstance(group, NCSum):
         if len(group) > 1:
             if not newlines:
                 group = order_group(group, print_group.orders)
@@ -1384,7 +1513,6 @@ def find_sub_subspaces(matrixrows):
 
 def sparse_linear_solve(cvector, matrixrows, subspace, vardict,
                         typ = MajoranaProduct,
-                        group_type = list,
                         fvarname = 'A',
                         iofvars = None,
                         numeric_dict = None,
@@ -1433,8 +1561,8 @@ def sparse_linear_solve(cvector, matrixrows, subspace, vardict,
         if iofvars is not None:
             iofvars[:] = newfvars
         solvector[:] = (vec.xreplace(subs_rules) for vec in solvector)
-    return simplify_group(group_type([typ(-solvector[i], list(key))
-                                      for i,key in enumerate(subspace)]))
+    return simplify_group([typ(-solvector[i], list(key))
+                                      for i,key in enumerate(subspace)])
 
 
 
@@ -1451,7 +1579,6 @@ def solve_commutator_equation(Jpart,
     description of arguments.
     """
     typ = type(Jpart[0])
-    group_type = type(Jpart)
     subspace, matrixrows = sparse_find_subspace(to_cancel, Jpart, verbose = verbose)
     cvector = build_vector(to_cancel, subspace)
     if delete_to_cancel:
@@ -1465,7 +1592,6 @@ def solve_commutator_equation(Jpart,
                                subspace,
                                vardict,
                                typ = typ,
-                               group_type = group_type,
                                iofvars = iofvars,
                                fvarname = fvarname,
                                numeric_dict = numeric_dict,
@@ -1519,7 +1645,7 @@ def _solve_single_nofvar(single, to_cancel):
         comm = single[0].commute(ncprod)
         if comm.scalar == 0:
             raise ValueError("Not invertible: " + str(ncprod))
-        result += [-comm*sympy.Rational(1, 4)]
+        result.extend([-comm*sympy.Rational(1, 4)])
     return result
 
 def solve_single_term_commutator_equation(single, to_cancel, fvars, vardict, verbose=False):
@@ -1527,8 +1653,7 @@ def solve_single_term_commutator_equation(single, to_cancel, fvars, vardict, ver
     is a single operator string, so we can use the fact that [single, .] is
     idempotent if it does not vanish.
     """
-    if not isinstance(single, list):
-        single = [single]
+    single = NCSum(single)
     if len(single) > 1:
         raise ValueError("Single term solver called but multiple terms in commutator.")
     simplify_remove_zeros(to_cancel)
@@ -1591,13 +1716,14 @@ def build_finite_support_subspace(L, L_supp, typ = MajoranaProduct, periodic = F
 #Find the maximum possible subspace for Jpart at order order using the recursive algorithm.
 def fill_subspace(Jpart, order):
     L = 2*order+1
+    typ = type(Jpart[0])
     subspace_ops = build_odd_norm_subspace(L)
     len_subspace = len(subspace_ops)
     matrixrows = defaultdict(list)
     subspace = OrderedDict(zip([tuple(el.product) for el in subspace_ops],
                                 [i for i in range(len_subspace)]))
     for product, ind_col in subspace.items():
-        comm = calculate_commutator(Jpart, MajoranaProduct(1, list(product)))
+        comm = calculate_commutator(Jpart, typ(1, list(product)))
         for ncprod in comm:
            ind_row = subspace[tuple(ncprod.product)]
            matrixrows[ind_row].append((ind_col, ncprod.scalar))
@@ -1613,11 +1739,11 @@ def fill_subspace_norm(Jpart, to_cancel, order):
 # that is, solve [H, X] = 0 over the entire space. Obviously extremely inefficient!
 
 def solve_at_once(H, L, iofvars = None, entire = False, numeric_dict = None):
-    group_type = type(H[0])
+    typ = type(H[0])
     if entire:
-        subspace_ops = build_entire_subspace(L, typ = group_type)
+        subspace_ops = build_entire_subspace(L, typ = typ)
     else:
-        subspace_ops = build_odd_subspace(L, typ = group_type)
+        subspace_ops = build_odd_subspace(L, typ = typ)
     len_subspace = len(subspace_ops)
     subspace = OrderedDict(zip([tuple(el.product) for el in subspace_ops],
                                 [i for i in range(len_subspace)]))
@@ -1638,7 +1764,7 @@ def solve_at_once(H, L, iofvars = None, entire = False, numeric_dict = None):
                                homogeneous = True,
                                fvarname = 'F',
                                iofvars=iofvars,
-                               typ= group_type,
+                               typ= typ,
                                numeric_dict = numeric_dict)
 
 

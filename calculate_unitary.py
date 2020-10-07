@@ -11,11 +11,13 @@ END_ORDER = 8
 START_GS = []
 
 def main(argv):
-    """ Calculate edge zero mode unitary. Hamiltonian can be either Paulis
-    or Majoranas, but result is given in Majoranas."""
+    """ Calculate unitary need to transform zeroth order such that it
+    is conserved by H order by order in small. Hamiltonian can be either Paulis
+    or Majoranas.
+    """
 
     if len(argv) != 2:
-        print("Usage: python3 calculate_edge_majorana_unitary.py XXX_hamil.py output_name")
+        print("Usage: python3 calculate_unitary.py XXX_hamil.py output_name")
 
     # Import the Hamiltonian module from the expanded absolute path into H.
     spec = importlib.util.spec_from_file_location("hamiltonian", str(Path(argv[0]).resolve()))
@@ -27,11 +29,13 @@ def main(argv):
     comm = H.comm
     c = comm.calculate_commutator
     Gs = START_GS
+    H.large = comm.NCSum(H.large)
+    H.small = comm.NCSum(H.small)
 
     if START_GS:
         psi_order = comm.unitary_transform_to_order(H.zeroth_order, Gs, START_ORDER-1)
     else:
-        psi_order = H.zeroth_order[:]
+        psi_order = comm.NCSum(H.zeroth_order[:])
 
     #Solve order by order for the unitary
     for test_order in range(START_ORDER, END_ORDER+1):
@@ -43,7 +47,7 @@ def main(argv):
                                                     Gs,
                                                     test_order,
                                                     not_single_comm=True)
-        Hcomm = comm.add_groups(c(H.large, psi_order), Hcomm)
+        Hcomm = c(H.large, psi_order) + Hcomm
 
         fvarname = 'F' + str(test_order) + '_'
         iofvars = []
@@ -62,11 +66,11 @@ def main(argv):
                                                          iofvars,
                                                          H.vardict,
                                                          verbose=True)
-        Gs.append(comm.premultiply(I, inv))
+        Gs.append(I*inv)
 
-        psi_order += comm.premultiply(I, comm.commute_group(H.zeroth_order, Gs[-1]))
+        psi_order.add_no_simplify(I*comm.commute_group(H.zeroth_order, Gs[-1]))
 
-        comm.save_group(Gs, FILEHEAD + '_r' + str(test_order), zeroth_order=H.zeroth_order)
+        comm.save_group(Gs, FILEHEAD + '_r' + str(test_order), zeroth_order=comm.NCSum(H.zeroth_order))
 
 
 print('Done!')
