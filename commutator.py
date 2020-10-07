@@ -877,7 +877,7 @@ class NCSum:
         return repr(self.group)
 
     def __str__(self):
-        if self._is_zero_():
+        if self.is_zero():
             return '0'
         return (' + '.join([str(ncprod) for ncprod in self]))
 
