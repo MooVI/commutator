@@ -6,6 +6,7 @@ import re
 from sympy import  I, sympify, S, factorial
 from sympy.printing.ccode import ccode
 from bisect import bisect_right
+import copy
 #import yaml
 import pickle
 import sympy
@@ -106,6 +107,18 @@ def merge(lsts):
             results.append(common)
         sets = results
     return sets
+
+
+def count_odd_even_pairs(a):
+    l = len(a) - 1
+    n = 0
+    i = 0
+    while i < l:
+        if a[i]%2 == 1:
+            n += (a[i+1] == a[i] + 1)
+            i += 1
+        i += 1
+    return n
 
 #YAML and other utility functions
 
@@ -309,9 +322,40 @@ class NCProduct:
         return '\u202f'.join([str(self.scalar*scalar).replace('**','^').replace('*','\u202f').replace('I','i')]
                              + strings)
 
+
+class Z2Product(NCProduct):
+
     def translate(self, nSites):
         db = nSites*2
         return type(self)(self.scalar, [el+db for el in self.product])
+
+    @staticmethod
+    def get_lattice_index(a):
+        return (a+1)//2
+
+    def get_operator_on_site(self, site):
+        ret = []
+        if (site*2-1) in self.product:
+            ret.append(site*2-1)
+        if (site*2) in self.product:
+            ret.append(site*2)
+        return type(self)(1, ret)
+
+    def support(self, L_periodic = None):
+        product = self.product
+        product = sorted(product)
+        if len(product) < 2:
+            return len(product)
+        if not L_periodic:
+            return get_lattice_distance(self, product[0], product[-1])+1
+        site_indices = list(dict.fromkeys([self.get_lattice_index(a) for a in product]))
+        return 1 + min([L_periodic+site_indices[i]-site_indices[i+1]
+                   for i in range(len(site_indices)-1)]+
+                   [site_indices[-1]-site_indices[0]])
+
+    def support_indices(self):
+        return list(dict.fromkeys([self.get_lattice_index(a) for a in self.product]))
+
 
 def sort_anticommuting_list(a):
     i = 0
@@ -329,7 +373,7 @@ def sort_anticommuting_list(a):
     return (-1)**nflips
 
 
-class MajoranaProduct(NCProduct):
+class MajoranaProduct(Z2Product):
     """ Majoranas on site n are labelled a_n and b_n and have integer
     representations 2*n -1, 2*n
     """
@@ -399,6 +443,7 @@ class MajoranaProduct(NCProduct):
         sign = sort_anticommuting_list(total)- sort_anticommuting_list(rev)
         return MajoranaProduct(sign*self.scalar*right.scalar, total)
 
+
 #Legacy compatibility.
 Ncproduct = MajoranaProduct
 
@@ -422,16 +467,7 @@ def sort_pauli_list(a):
         i+=1
     return (-1)**nflips
 
-def count_ys_in_pauli_list(a):
-    l = len(a) - 1
-    n = 0
-    i = 0
-    while i < l:
-        n += (a[i+1] == a[i] + 1)
-        i += 2
-    return n
-
-class SigmaProduct(NCProduct):
+class SigmaProduct(Z2Product):
     """ Paulis on site n are labelled x_n, y_n, z_n and have integer
     representations z_n =  2*n-1, x_n = 2*n and y_n = i*[2n*-1, 2*n].
     i.e. in the product y_n is given by z_n x_n and the i goes into the
@@ -503,10 +539,10 @@ class SigmaProduct(NCProduct):
         """ The sign in the equation: product = +- (reverse-ordered product)
         for a pre-SORTED, NON-DUPLICATE product.
         """
-        return 1-2*(count_ys_in_pauli_list(product)%2)
+        return 1-2*(count_odd_even_pairs(product)%2)
 
     def reverse_sign(self):
-        return 1-2*(count_ys_in_pauli_list(self.product)%2)
+        return 1-2*(count_odd_even_pairs(self.product)%2)
 
     def commute(self, right):
         """Commutes so that self.commute(right) = [self, right]"""
@@ -553,9 +589,6 @@ def convert_from_sigma(sigma):
     ret.sort()
     set_squares_to_identity(ret)
     return ret
-
-
-# Generally, to sum NCProducts just put them in a list.
 
 # This class attempts to implement a translationally invariant sum.
 # That is, everything inside is assummed repeated indefinitely.
@@ -720,11 +753,11 @@ def commute_group_inv(sumA, sumB):
 def get_lattice_index(a):
     return (a+1)//2
 
-def get_lattice_distance(a1,a2, L_periodic = None):
+def get_lattice_distance(prod, a1,a2, L_periodic = None):
     if a1 ==a2:
         return 0
-    n1 = get_lattice_index(a1)
-    n2 = get_lattice_index(a2)
+    n1 = prod.get_lattice_index(a1)
+    n2 = prod.get_lattice_index(a2)
     n1, n2 = (n1, n2) if n1 < n2 else (n2, n1)
     return n2-n1 if not L_periodic else min([n2-n1, n1+L_periodic-n2])
 
@@ -736,17 +769,7 @@ def get_lattice_distance_only_wrapped(a1,a2, L_periodic):
     n1, n2 = (n1, n2) if n1 < n2 else (n2, n1)
     return n1+L_periodic-n2
 
-def get_support(ncproduct, L_periodic = None):
-    product = ncproduct.product
-    product = sorted(product)
-    if len(product) < 2:
-        return len(product)
-    if not L_periodic:
-        return get_lattice_distance(product[0], product[-1])+1
-    site_indices = list(dict.fromkeys([(a+1)//2 for a in product]))
-    return 1 + min([L_periodic+site_indices[i]-site_indices[i+1]
-                   for i in range(len(site_indices)-1)]+
-                   [site_indices[-1]-site_indices[0]])
+
 
 class ind_converter:
     def __init__(self, row, col):
@@ -782,7 +805,7 @@ class NCSum:
         if isinstance(group, list):
             self.group = group
         elif isinstance(group, NCSum):
-            self = group
+            self.group = copy.deepcopy(group.group)
         elif isinstance(group, NCProduct):
             self.group = [group]
         elif group == 0:
@@ -1711,7 +1734,7 @@ def build_odd_norm_subspace(L, typ = MajoranaProduct):
 
 def build_finite_support_subspace(L, L_supp, typ = MajoranaProduct, periodic = False):
     return [ncprod for ncprod in build_entire_subspace(L, typ = typ)
-            if get_support(ncprod, L_periodic = L if periodic else None) <= L_supp]
+            if ncprod.support(L_periodic = L if periodic else None) <= L_supp]
 
 #Find the maximum possible subspace for Jpart at order order using the recursive algorithm.
 def fill_subspace(Jpart, order):
