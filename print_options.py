@@ -1,7 +1,7 @@
 #!/home/kempj/py343ve/bin/python
 
 import sys, getopt
-from commutator import load_group, print_group, substitute_group, collect_terms, convert_group, order_group, texify_group, remove_zeros, full_simplify_group
+from commutator import load_group, print_group, substitute_group, collect_terms, convert_group, order_group, texify_group, remove_zeros, full_simplify_group, NCSum
 from sympy import symbols, Symbol
 
 def main(argv):
@@ -51,7 +51,7 @@ def main(argv):
         psi = load_group(name, iofvars=iofvars, normdict=normdict)
     elif unitary:
         gs = load_group(name)
-        psi = []
+        psi = NCSum([])
         for g in gs:
             psi += g
     else:

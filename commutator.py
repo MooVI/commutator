@@ -219,8 +219,11 @@ class NCProduct:
             self.product, scalar = self.destringify(prodstr)
             self.scalar = self.scalar * scalar
         elif isinstance(product, str):
-            self.product, scalar = self.destringify(product)
-            self.scalar = self.scalar * scalar
+            if product == 'Id':
+                self.product = []
+            else:
+                self.product, scalar = self.destringify(product)
+                self.scalar = self.scalar * scalar
         else:
             self.product = [product]
 
@@ -321,6 +324,9 @@ class NCProduct:
         strings, scalar = self.self_stringify()
         return '\u202f'.join([str(self.scalar*scalar).replace('**','^').replace('*','\u202f').replace('I','i')]
                              + strings)
+
+    def simplify_scalar(self):
+        return type(self)(sympy.simplify(self.scalar), self.product)
 
 
 class Z2Product(NCProduct):
@@ -498,6 +504,28 @@ class SigmaProduct(Z2Product):
                 strings.append('z' + str((a+1)//2))
             i = i +1
         return strings, scalar
+
+    def texify(self, init_string = None):
+        strings = []
+        scalar = 1
+        i = 0
+        while i  < len(self):
+            a = self.product[i]
+            a2 = self.product[i+1] if i != len(self) -1 else None
+            if a % 2 == 0:
+                strings.append('\\sigma^x_{' + str(a//2)+'}')
+            elif a2 == a + 1:
+                strings.append('\\sigma^y_{' + str((a+1)//2)+'}')
+                scalar = scalar * I
+                i = i + 1
+            else:
+                strings.append('\\sigma^z_{' + str((a+1)//2)+'}')
+            i = i +1
+        tex = sympy.latex(self.scalar*scalar)
+        if (sympify(self.scalar).func ==sympy.Add):
+            tex = '\\left (' + tex + '\\right )'
+        return ' '.join([tex]
+                        + strings)
 
     @staticmethod
     def _texify_stringify(a, init_string = None):
@@ -921,6 +949,9 @@ class NCSum:
             return self.is_zero()
         return False
 
+    def simplify_scalars(self):
+        return NCSum([a.simplify_scalar() for a in self])
+
 
 # Simplification of groups
 
@@ -930,7 +961,8 @@ def collect_terms(group):
     for i,ncprod in enumerate(group):
         D[tuple(ncprod.product)].append(i)
     return NCSum([type(group[0])(
-        sympy.expand(sum([group[i].scalar for i in D[key]])), list(key))
+         sum([group[i].scalar for i in D[key]]), list(key))
+    #    sympy.expand(sum([group[i].scalar for i in D[key]])), list(key))
                        for key in D])
 
 def full_collect_terms(group):

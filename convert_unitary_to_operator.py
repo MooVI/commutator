@@ -1,5 +1,5 @@
 import sys
-from commutator import load_group, unitary_transform_to_order, save_group
+from commutator import load_group, unitary_transform_to_order, save_group, NCSum
 
 
 def main(argv):
@@ -8,11 +8,11 @@ def main(argv):
         print("Usage: python3 print_error.py unitary_name output_name [max_order]")
     gs_name = argv[0]
     psi_name = argv[1]
-    zeroth_order = []
+    zeroth_order = NCSum([])
     Gs = load_group(gs_name, zeroth_order=zeroth_order)
     max_order = int(str(argv[2])) if len(argv) > 2 else len(Gs)
     split_orders = [0, 1]
-    psi = zeroth_order[:]
+    psi = NCSum(zeroth_order[:])
     for order in range(1, max_order+1):
         psi += unitary_transform_to_order(zeroth_order, Gs, order)
         split_orders.append(len(psi))
