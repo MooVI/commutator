@@ -1,5 +1,5 @@
 import sys
-from commutator import load_group, unitary_transform_to_order, save_group, NCSum
+from commutatorbitarray import load_group, unitary_transform_to_order, save_group, NCSum
 
 
 def main(argv):
@@ -14,7 +14,7 @@ def main(argv):
     split_orders = [0, 1]
     psi = NCSum(zeroth_order[:])
     for order in range(1, max_order+1):
-        psi += unitary_transform_to_order(zeroth_order, Gs, order)
+        psi.add_no_simplify(unitary_transform_to_order(zeroth_order, Gs, order))
         split_orders.append(len(psi))
         save_group(psi, psi_name+'_r'+ str(order), split_orders=split_orders)
 
