@@ -1,7 +1,7 @@
 #!/home/kempj/py343ve/bin/python
 
 import sys, getopt
-from commutator import load_group, print_group, substitute_group, collect_terms, convert_group, order_group, texify_group, remove_zeros, full_simplify_group, NCSum
+from commutator import load_group, print_group, substitute_group, collect_terms, convert_group, order_group, texify_group, remove_zeros, full_simplify_group, NCSum, MajoranaProduct
 from sympy import symbols, Symbol
 
 def main(argv):
@@ -68,6 +68,8 @@ def main(argv):
         remove_zeros(psi)
     if convert:
         psi = convert_group(psi)
+        jw =  MajoranaProduct(1, psi[0].product[:-1])
+        psi = multiply_groups([jw], psi)
     if order:
         V, f, V1, V2, X, Y, Vy = symbols('V f V1 V2 X Y Vy')
         orders = {V:1, f:1, V1:1, V2:1, X:1, Y:1, Vy:1}

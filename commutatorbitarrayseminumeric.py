@@ -14,6 +14,7 @@ import pickle
 import sympy
 from subprocess import check_output
 import sys
+import commutator as commold
 
 # this is a pointer to the module object instance itself.
 this = sys.modules[__name__]
@@ -587,6 +588,13 @@ class SigmaProduct(Z2Product):
                             [self.product[0]^right.product[0],
                              self.product[1]^right.product[1]])
 
+    def anticommute(self, right):
+        """Commutes so that self.commute(right) = [self, right]"""
+        sign = (-1)**(self.product[1]&right.product[0]).count()+(-1)**(self.product[0]&right.product[1]).count()
+        return SigmaProduct(sign*self.scalar*right.scalar,
+                            [self.product[0]^right.product[0],
+                             self.product[1]^right.product[1]])
+
 
 # def set_squares_to_identity(ncprod):
 #     i = 0
@@ -612,19 +620,21 @@ class SigmaProduct(Z2Product):
 #     return ret
 
 
-# def convert_from_sigma(sigma):
-#     ret = MajoranaProduct(1, [])
-#     ret.scalar = sigma.scalar
-#     for el in sigma.product:
-#         if el % 2 == 0:
-#             ret.scalar *= -I
-#             ret.product += [el-1, el]
-#         else:
-#             ret.product += [i for i in range(1,el,1)]+[el]
-#             ret.scalar *= (-I)**((el-1)//2)
-#     ret.sort()
-#     set_squares_to_identity(ret)
-#     return ret
+def convert_from_sigma(sigma):
+    ret = commold.MajoranaProduct(1, [])
+    ret.scalar = sigma.scalar
+    for a, (z, x) in enumerate(zip(*sigma.product)):
+        if z:
+            el = 2*(a+1)-1
+            ret.product += [i for i in range(1,el,1)]+[el]
+            ret.scalar *= (-I)**((el-1)//2)
+        if x:
+            el = 2*(a+1)
+            ret.scalar *= -I
+            ret.product += [el-1, el]
+    ret.sort()
+    commold.set_squares_to_identity(ret)
+    return ret
 
 # This class attempts to implement a translationally invariant sum.
 # That is, everything inside is assummed repeated indefinitely.
@@ -963,32 +973,46 @@ class NCSum:
 
 # Simplification of groups
 
+def hash_product(product):
+    return tuple([product[0].tobytes(), product[1].tobytes()])
+
 def collect_terms(group):
     from collections import defaultdict
     D = defaultdict(list)
+    hashes = {}
     for i,ncprod in enumerate(group):
-        D[tuple(ncprod.product)].append(i)
+        hashp = hash_product(ncprod.product)
+        D[hashp].append(i)
+        hashes[hashp] = ncprod.product
     return NCSum([type(group[0])(
-         sum([group[i].scalar for i in D[key]]), list(key))
+         sum([group[i].scalar for i in D[key]]), hashes[key])
     #    sympy.expand(sum([group[i].scalar for i in D[key]])), list(key))
                        for key in D])
 
 def full_collect_terms(group):
     from collections import defaultdict
     D = defaultdict(list)
+    hashes = {}
     for i,ncprod in enumerate(group):
-        D[tuple(ncprod.product)].append(i)
+        hashp = hash_product(ncprod.product)
+        D[hashp].append(i)
+        hashes[hashp] = ncprod.product
     return NCSum([type(group[0])(
-        sympy.simplify(sum([group[i].scalar for i in D[key]])), list(key))
-                                for key in D])
+         sympy.simplify(sum([group[i].scalar for i in D[key]])), hashes[key])
+    #    sympy.expand(sum([group[i].scalar for i in D[key]])), list(key))
+                       for key in D])
 
 def math_collect_terms(group):
     from collections import defaultdict
     D = defaultdict(list)
+    hashes = {}
     for i,ncprod in enumerate(group):
-        D[tuple(ncprod.product)].append(i)
+        hashp = hash_product(ncprod.product)
+        D[hashp].append(i)
+        hashes[hashp] = ncprod.product
     return NCSum([type(group[0])(
-        mathematica_simplify(sum([group[i].scalar for i in D[key]])), list(key))
+         mathematica_simplify(sum([group[i].scalar for i in D[key]])), hashes[key])
+    #    sympy.expand(sum([group[i].scalar for i in D[key]])), list(key))
                        for key in D])
 
 def is_zero(a):
@@ -1089,9 +1113,9 @@ def trace_inner_product(group_a, group_b):
     DB = defaultdict(list)
     result = 0
     for i,ncprod in enumerate(group_a):
-        DA[tuple(ncprod.product)].append(i)
+        DA[hash_product(ncprod.product)].append(i)
     for i,ncprod in enumerate(group_b):
-        DB[tuple(ncprod.product)].append(i)
+        DB[hash_product(ncprod.product)].append(i)
     ind_pairs = [ [i, j] for key in set(DA.keys()).intersection(DB.keys())
                   for i in DA[key] for j in DB[key]]
     for i, j in ind_pairs:
@@ -1106,9 +1130,9 @@ def hermitian_trace_inner_product(group_a, group_b):
     DB = defaultdict(list)
     result = 0
     for i,ncprod in enumerate(group_a):
-        DA[tuple(ncprod.product)].append(i)
+        DA[hash_product(ncprod.product)].append(i)
     for i,ncprod in enumerate(group_b):
-        DB[tuple(ncprod.product)].append(i)
+        DB[hash_product(ncprod.product)].append(i)
     ind_pairs = [ [i, j] for key in set(DA.keys()).intersection(DB.keys())
                   for i in DA[key] for j in DB[key]]
     for i, j in ind_pairs:
@@ -1201,7 +1225,7 @@ def square_to_find_identity_scalar_up_to_order(group, order, split_orders):
     D = defaultdict(dict)
     typ = type(group[0])
     for i,ncprod in enumerate(group):
-        D[tuple(ncprod.product)].update({bisect_right(split_orders,i)-1: i})
+        D[hash_product(ncprod.product)].update({bisect_right(split_orders,i)-1: i})
     result = 0
     for torder in range(order+1):
         for product, positions in D.items():
@@ -1209,7 +1233,7 @@ def square_to_find_identity_scalar_up_to_order(group, order, split_orders):
                 jorder = torder - iorder
                 if jorder in positions:
                     result += (group[positions[iorder]].scalar
-                               *typ.reverse_sign_product(product)*group[positions[jorder]].scalar)
+                               *group[positions[jorder]].scalar)
     return sympy.expand(result)
 
 
@@ -1282,6 +1306,9 @@ def exponentiate_to_order(Gs, torder, inverse = False):
                 break
     return simplify_group(result)
 
+def calculate_not_square_to_identity(psi, order, split_orders):
+    norm = square_group_to_order(psi, order, split_orders)
+    return NCSum([ncprod for ncprod in norm if not ncprod.is_identity()])
 
 
 # Functions for dealing with free variables in groups.
@@ -1312,19 +1339,12 @@ def split_free_vars(group, fvars):
 # Group Utility functions: conversion Sigma <--> Majorana, printing, saving, loading...
 
 
-# def convert_group(group):
-#     if isinstance(group, TransInvSum):
-#         return group.convert()
-#     if not isinstance(group, NCSum):
-#         group = NCSum(group)
-#     if group.is_zero():
-#         return []
-#     if isinstance(group[0], SigmaProduct):
-#         return NCSum([convert_from_sigma(el) for el in group])
-#     elif isinstance(group[0], MajoranaProduct):
-#         return NCSum([convert_to_sigma(el) for el in group])
-#     else:
-#         raise ValueError('Unrecognised conversion asked for!')
+def convert_group(group):
+    if not isinstance(group, NCSum):
+         group = NCSum(group)
+    if group.is_zero():
+         return []
+    return commold.NCSum([convert_from_sigma(el) for el in group])
 
 
 
@@ -1646,13 +1666,12 @@ def solve_commutator_equation(Jpart,
 
 
 
-def _clean_to_cancel_of_fvars(check_unsolvable, to_cancel, fvars, vardict, verbose):
+def _clean_to_cancel_of_fvars(check_unsolvable, to_cancel, fvars, vardict, fsols, verbose):
     """ Removes free variables from expression to cancel. Takes a
     pragmatic approach: sets the necessary free variables so that the
     operator equation *can* be solved at all, then sets all others to 0.
     """
     cvector = []
-    solutions = {}
     matrixrows = {}
     ind = 0
     if verbose:
@@ -1673,16 +1692,16 @@ def _clean_to_cancel_of_fvars(check_unsolvable, to_cancel, fvars, vardict, verbo
     sub_sub_spaces = find_sub_subspaces(matrixrows)
     length_ss = len(sub_sub_spaces)
     for i, ss_space in enumerate(sub_sub_spaces):
-        solutions.update(solve_for_sub_subspace(matrixrows, ss_space,
+        fsols.update(solve_for_sub_subspace(matrixrows, ss_space,
                                                 fvars, cvector, None,
                                                 None, None, vardict))
         print_progress(i, length_ss)
     for fvar in fvars:
-        if fvar not in solutions:
+        if fvar not in fsols:
             if verbose:
                 print("Zeroing fvar: " +str(fvar))
-            solutions[fvar] = 0
-    return substitute_group(to_cancel, solutions)
+            fsols[fvar] = 0
+    return substitute_group(to_cancel, fsols)
 
 
 def _solve_single_nofvar(single, to_cancel):
@@ -1694,11 +1713,13 @@ def _solve_single_nofvar(single, to_cancel):
         result.extend([-comm*sympy.Rational(1, 4)])
     return result
 
-def solve_single_term_commutator_equation(single, to_cancel, fvars, vardict, verbose=False):
+def solve_single_term_commutator_equation(single, to_cancel, fvars, vardict, fsols = None, verbose=False):
     """ Solve the equation [single, X] + to_cancel = 0 for X, where single
     is a single operator string, so we can use the fact that [single, .] is
     idempotent if it does not vanish.
     """
+    if fsols is None:
+        fsols = {}
     single = NCSum(single)
     if len(single) > 1:
         raise ValueError("Single term solver called but multiple terms in commutator.")
@@ -1707,8 +1728,37 @@ def solve_single_term_commutator_equation(single, to_cancel, fvars, vardict, ver
         singleunit = single[0].get_unit()
         def check_unsolvable(ncprod):
             return is_zero(singleunit.commute(ncprod.get_unit()).scalar)
-        to_cancel = _clean_to_cancel_of_fvars(check_unsolvable, to_cancel, fvars, vardict, verbose)
+        to_cancel = _clean_to_cancel_of_fvars(check_unsolvable, to_cancel, fvars, vardict, fsols, verbose)
     return _solve_single_nofvar(single, to_cancel)
+
+
+def _solve_single_anti_nofvar(single, to_cancel):
+    result = type(to_cancel)([])
+    for ncprod in to_cancel:
+        comm = single[0].anticommute(ncprod)
+        if is_zero(comm.scalar):
+            raise ValueError("Not invertible: " + str(ncprod))
+        result.extend([-comm*sympy.Rational(1, 4)])
+    return result
+
+def solve_single_term_anticommutator_equation(single, to_cancel, fvars, vardict, fsols = None, verbose=False):
+    """ Solve the equation {single, X} + to_cancel = 0 for X, where single
+    is a single operator string, so we can use the fact that {single, .} is
+    idempotent if it does not vanish.
+    """
+    if fsols is None:
+        fsols = {}
+    single = NCSum(single)
+    if len(single) > 1:
+        raise ValueError("Single term solver called but multiple terms in commutator.")
+    simplify_remove_zeros(to_cancel)
+    if fvars:
+        singleunit = single[0].get_unit()
+        def check_unsolvable(ncprod):
+            return is_zero(singleunit.anticommute(ncprod.get_unit()).scalar)
+        to_cancel = _clean_to_cancel_of_fvars(check_unsolvable, to_cancel, fvars, vardict, fsols, verbose)
+    return _solve_single_anti_nofvar(single, to_cancel)
+
 
 
 # Functions to invert [a1, Gs[-1]] = to_invert to find Gs[-1],

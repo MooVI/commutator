@@ -1058,10 +1058,20 @@ def commute_group(group_a, group_b):
                 result.append(a.commute(b))
     return NCSum(result)
 
+def anticommute_group(group_a, group_b):
+    """For known groups. Prefer using calculate_commutator instead if
+    could be individual NCProducts as well.
+    """
+    result = NCSum([])
+    for a in group_a:
+        for b in group_b:
+            result+=(a*b+b*a)
+    return NCSum(result)
+
 def calculate_commutator(group_a, group_b):
     """Works with single NCProducts and TransInvSum as well"""
     if len(group_a) == 0 or len(group_b) == 0:
-        return type(group_a)([])
+        return NCSum([])
     if isinstance(group_a, TransInvSum):
         if isinstance(group_b, TransInvSum):
             group = commute_group_inv(group_a, group_b)
@@ -1196,6 +1206,18 @@ def commute_up_to_order(group_a, group_b, order, split_orders_a, split_orders_b)
     for aorder in range(a_order_max):
         for border in range(min([order-aorder, b_order_max])):
             result += commute_group(group_a[split_orders_a[aorder]:split_orders_a[aorder+1]],
+                                    group_b[split_orders_b[border]:split_orders_b[border+1]])
+    return simplify_group(result)
+
+def anticommute_up_to_order(group_a, group_b, order, split_orders_a, split_orders_b):
+    result = NCSum([])
+    a_order_max = len(split_orders_a)-1
+    b_order_max = len(split_orders_b)-1
+    if a_order_max + b_order_max <= order:
+        return simplify_group(anticommute_group(group_a, group_b))
+    for aorder in range(a_order_max):
+        for border in range(min([order-aorder, b_order_max])):
+            result += anticommute_group(group_a[split_orders_a[aorder]:split_orders_a[aorder+1]],
                                     group_b[split_orders_b[border]:split_orders_b[border+1]])
     return simplify_group(result)
 
@@ -1822,7 +1844,13 @@ def solve_at_once(H, L, iofvars = None, entire = False, numeric_dict = None):
                                typ= typ,
                                numeric_dict = numeric_dict)
 
-
+def get_resonances(psi, var):
+    """For an operator psi, get resonances in terms of variable var"""
+    sols = set()
+    for el in psi:
+        n, d = sympy.fraction(sympy.together(el.scalar))
+        sols.update(sympy.solve(d, var))
+    return sols
 
 
 
