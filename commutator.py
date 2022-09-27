@@ -1058,10 +1058,20 @@ def commute_group(group_a, group_b):
                 result.append(a.commute(b))
     return NCSum(result)
 
+def anticommute_group(group_a, group_b):
+    """For known groups. Prefer using calculate_commutator instead if
+    could be individual NCProducts as well.
+    """
+    result = NCSum([])
+    for a in group_a:
+        for b in group_b:
+            result+=(a*b+b*a)
+    return NCSum(result)
+
 def calculate_commutator(group_a, group_b):
     """Works with single NCProducts and TransInvSum as well"""
     if len(group_a) == 0 or len(group_b) == 0:
-        return type(group_a)([])
+        return NCSum([])
     if isinstance(group_a, TransInvSum):
         if isinstance(group_b, TransInvSum):
             group = commute_group_inv(group_a, group_b)
@@ -1090,6 +1100,7 @@ def square_to_find_identity_scalar(group):
     for ncprod in collect_terms(group):
         result += (sympy.expand(ncprod.scalar*ncprod.scalar))*ncprod.reverse_sign()
     return result
+
 
 def trace_inner_product(group_a, group_b):
     """Tr(A B) not Tr(A^dagger B)"""
@@ -1199,6 +1210,18 @@ def commute_up_to_order(group_a, group_b, order, split_orders_a, split_orders_b)
                                     group_b[split_orders_b[border]:split_orders_b[border+1]])
     return simplify_group(result)
 
+def anticommute_up_to_order(group_a, group_b, order, split_orders_a, split_orders_b):
+    result = NCSum([])
+    a_order_max = len(split_orders_a)-1
+    b_order_max = len(split_orders_b)-1
+    if a_order_max + b_order_max <= order:
+        return simplify_group(anticommute_group(group_a, group_b))
+    for aorder in range(a_order_max):
+        for border in range(min([order-aorder, b_order_max])):
+            result += anticommute_group(group_a[split_orders_a[aorder]:split_orders_a[aorder+1]],
+                                    group_b[split_orders_b[border]:split_orders_b[border+1]])
+    return simplify_group(result)
+
 def square_group_to_order(group, order, split_orders):
     return simplify_group([(a*b)
                            for i in range(order+1)
@@ -1220,6 +1243,11 @@ def square_to_find_identity_scalar_up_to_order(group, order, split_orders):
                     result += (group[positions[iorder]].scalar
                                *typ.reverse_sign_product(product)*group[positions[jorder]].scalar)
     return sympy.expand(result)
+
+
+def calculate_not_square_to_identity(psi, order, split_orders):
+    norm = square_group_to_order(psi, order, split_orders)
+    return NCSum([ncprod for ncprod in norm if not ncprod.is_identity()])
 
 
 def unitary_transform(to_trans, Gs, max_order, inverse = False):
@@ -1822,7 +1850,13 @@ def solve_at_once(H, L, iofvars = None, entire = False, numeric_dict = None):
                                typ= typ,
                                numeric_dict = numeric_dict)
 
-
+def get_resonances(psi, var):
+    """For an operator psi, get resonances in terms of variable var"""
+    sols = set()
+    for el in psi:
+        n, d = sympy.fraction(sympy.together(el.scalar))
+        sols.update(sympy.solve(d, var))
+    return sols
 
 
 

@@ -1249,6 +1249,23 @@ def unitary_transform(to_trans, Gs, max_order, inverse = False):
                     break
     return simplify_group(result)
 
+
+def unitary_transform_first_order(to_trans, G, max_order, inverse = False):
+    """Unitary transform of form U = e^i(G),
+    where Gs[n] has order n+1. max_order is max_order of output,
+    inverse = true calculates -i rather than +i.
+    """
+    result = NCSum(to_trans)
+    cumul = NCSum(to_trans)
+    for torder in range(1,max_order+1):
+        if inverse:
+            taylorscalar = ((-I)**numcomms)/factorial(numcomms)
+        else:
+            taylorscalar = (I**numcomms)/factorial(numcomms)
+        cumul = calculate_commutator(cumul, G)
+        result.extend(taylorscalar*cumul)
+    return simplify_group(result)
+
 def unitary_transform_to_order(to_trans, Gs, torder,
                                not_single_comm = False,
                                inverse = False):
